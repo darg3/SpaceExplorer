@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpaceMan</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; }
+    canvas { display: block; }
+    #hint {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(100, 200, 255, 0.55);
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      pointer-events: none;
+      text-shadow: 0 0 12px rgba(80, 160, 255, 0.5);
+      transition: opacity 1s;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="hint">W/S · PITCH &nbsp; A/D · YAW &nbsp; Q/E · ROLL &nbsp; SHIFT · BOOST</div>
+
+  <!--
+    OPTIONAL: Drop a NASA nebula image into assets/nebula.jpg
+    and it will replace the procedural background.
+
+    Great sources (all public domain / CC):
+    https://images.nasa.gov  →  search "nebula" or "pillars of creation"
+    https://hubblesite.org/images/gallery
+  -->
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
