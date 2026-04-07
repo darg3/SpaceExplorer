@@ -115,9 +115,6 @@ const world = new World(scene);
 const ship = new Ship(scene, input);
 
 // ── Camera ────────────────────────────────────────────────────────────────────
-const CAM_LOCAL  = new THREE.Vector3(-300, 0, 70);
-const _camTarget = new THREE.Vector3();
-const _camUp     = new THREE.Vector3();
 
 // ── Resize ────────────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
@@ -131,6 +128,37 @@ setTimeout(() => {
   const hint = document.getElementById('hint');
   if (hint) hint.style.opacity = '0';
 }, 6000);
+
+// ── Orbit Camera ──────────────────────────────────────────────────────────────
+let inspTheta    = Math.PI;       // azimuth: π = behind ship (ship faces +X)
+let inspPhi      = Math.PI * 0.38; // elevation from Z (~68° — slightly above horizontal)
+let inspRadius   = 320;
+let inspDragging = false;
+let inspLastX    = 0;
+let inspLastY    = 0;
+
+window.addEventListener('mousedown', e => {
+  inspDragging = true;
+  inspLastX = e.clientX;
+  inspLastY = e.clientY;
+});
+
+window.addEventListener('mouseup',   () => { inspDragging = false; });
+window.addEventListener('mouseleave',() => { inspDragging = false; });
+
+window.addEventListener('mousemove', e => {
+  if (!inspDragging) return;
+  const dx = e.clientX - inspLastX;
+  const dy = e.clientY - inspLastY;
+  inspLastX = e.clientX;
+  inspLastY = e.clientY;
+  inspTheta -= dx * 0.007;
+  inspPhi    = THREE.MathUtils.clamp(inspPhi + dy * 0.007, 0.05, Math.PI - 0.05);
+});
+
+window.addEventListener('wheel', e => {
+  inspRadius = THREE.MathUtils.clamp(inspRadius + e.deltaY * 0.4, 60, 800);
+}, { passive: true });
 
 // ── Animation Loop ────────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
@@ -147,11 +175,14 @@ const clock = new THREE.Clock();
   // Skybox follows camera (appears infinite)
   if (skybox) skybox.position.copy(camera.position);
 
-  // 3D rolling chase camera
-  _camTarget.copy(CAM_LOCAL).applyQuaternion(ship.quaternion).add(ship.position);
-  camera.position.lerp(_camTarget, 0.06);
-  _camUp.set(0, 0, 1).applyQuaternion(ship.quaternion);
-  camera.up.copy(_camUp);
+  // Orbit camera: always follows ship, mouse drag to rotate, scroll to zoom
+  const sinPhi = Math.sin(inspPhi);
+  camera.position.set(
+    ship.position.x + inspRadius * sinPhi * Math.cos(inspTheta),
+    ship.position.y + inspRadius * sinPhi * Math.sin(inspTheta),
+    ship.position.z + inspRadius * Math.cos(inspPhi),
+  );
+  camera.up.set(0, 0, 1);
   camera.lookAt(ship.position);
 
   renderer.render(scene, camera);
