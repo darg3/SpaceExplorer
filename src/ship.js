@@ -113,6 +113,22 @@ export class Ship {
       strip.position.set(0, zOff * 25, zOff > 0 ? 6 : -6);
       this.group.add(strip);
     });
+
+    // Rocket turret pods — two symmetric barrels along +X near the nose
+    this._turretPositions = [];
+    [1, -1].forEach(side => {
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(3, 3.5, 8, 8), accent);
+      base.rotation.z = -Math.PI / 2;
+      base.position.set(28, 0, side * 10);
+      this.group.add(base);
+
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 18, 8), dark);
+      barrel.rotation.z = -Math.PI / 2;
+      barrel.position.set(40, 0, side * 10);
+      this.group.add(barrel);
+
+      this._turretPositions.push(new THREE.Vector3(50, 0, side * 10));
+    });
   }
 
   // ── Thruster Glow ──────────────────────────────────────────────────────────
@@ -212,6 +228,12 @@ export class Ship {
   setEngine(on)        { this.engineOn = on; }
   stopShip()           { this.engineOn = false; }
   setTargetSpeed(s)    { this.targetSpeed = THREE.MathUtils.clamp(s, 0, BOOST_SPEED); }
+
+  // Returns world-space positions of both turret barrels (used by RocketManager)
+  getTurretPositions() {
+    this.group.updateMatrixWorld(true);
+    return this._turretPositions.map(p => p.clone().applyMatrix4(this.group.matrixWorld));
+  }
 
   // ── Update (call every frame) ─────────────────────────────────────────────
 
