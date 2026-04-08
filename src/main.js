@@ -146,6 +146,115 @@ const fleet   = new NPCFleet(scene);
 const rockets = new RocketManager(scene);
 let   elapsed = 0;
 
+// ── Warp ──────────────────────────────────────────────────────────────────────
+const WARP_ARRIVE_DIST = 500;   // units from target on arrival
+const WARP_MIN_DIST    = 600;   // minimum distance to show warp button
+const WARP_COOLDOWN    = 5.0;   // seconds before warp can be used again
+
+let _warpCooldown = 0;
+
+function doWarp() {
+  if (!currentTarget || _warpCooldown > 0) return;
+
+  const targetPos = new THREE.Vector3();
+  currentTarget.getWorldPosition(targetPos);
+  if (ship.position.distanceTo(targetPos) < WARP_MIN_DIST) return;
+
+  const destLabel = currentTarget.userData.label || 'Unknown';
+
+  // Arrive WARP_ARRIVE_DIST units from the target, on the side facing the ship
+  const fromDir    = new THREE.Vector3().subVectors(ship.position, targetPos).normalize();
+  const arrivalPos = targetPos.clone().addScaledVector(fromDir, WARP_ARRIVE_DIST);
+
+  hud.showWarpButton(false);
+
+  hud.triggerWarpFlash(destLabel, () => {
+    // Teleport ship while the screen is white
+    ship.group.position.copy(arrivalPos);
+
+    // Orient to face the target
+    const fwd = new THREE.Vector3().subVectors(targetPos, arrivalPos).normalize();
+    if (fwd.lengthSq() > 0.001) {
+      ship.group.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), fwd);
+    }
+
+    // Reset orbit camera to default behind-ship view
+    inspTheta  = Math.PI;
+    inspPhi    = Math.PI * 0.38;
+    inspRadius = 320;
+
+    _warpCooldown = WARP_COOLDOWN;
+  });
+}
+
+// ── Mining ────────────────────────────────────────────────────────────────────
+const MINE_RANGE    = 400;   // max distance to initiate mining
+const MINE_DURATION = 3.0;   // seconds to complete a mine
+
+let _isMining    = false;
+let _miningAccum = 0;
+let _miningTgt   = null;   // the mesh currently being mined
+let _miningBeam  = null;   // { inner, outer, innerMat, outerMat, light }
+
+function _createBeam() {
+  const innerMat = new THREE.MeshBasicMaterial({
+    color: 0x00ffcc, blending: THREE.AdditiveBlending,
+    transparent: true, opacity: 0.9, depthWrite: false,
+  });
+  const outerMat = new THREE.MeshBasicMaterial({
+    color: 0x00ffcc, blending: THREE.AdditiveBlending,
+    transparent: true, opacity: 0.2, depthWrite: false,
+  });
+  const inner = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1, 8), innerMat);
+  const outer = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.2, 1, 8), outerMat);
+  const light = new THREE.PointLight(0x00ffcc, 8, 260);
+  scene.add(inner); scene.add(outer); scene.add(light);
+  return { inner, outer, innerMat, outerMat, light };
+}
+
+function _positionBeam(beam, start, end) {
+  const dir = new THREE.Vector3().subVectors(end, start);
+  const len = dir.length();
+  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+  const q   = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0), dir.normalize(),
+  );
+  for (const m of [beam.inner, beam.outer]) {
+    m.position.copy(mid);
+    m.scale.set(1, len, 1);
+    m.quaternion.copy(q);
+    m.visible = true;
+  }
+  beam.light.position.copy(end);
+}
+
+function startMining() {
+  if (!currentTarget || currentTarget.userData.mined || _isMining) return;
+  _isMining    = true;
+  _miningAccum = 0;
+  _miningTgt   = currentTarget;
+  _miningBeam  = _createBeam();
+  hud.setMiningProgress(0);
+}
+
+function stopMining(completed) {
+  _isMining = false;
+  if (_miningBeam) {
+    scene.remove(_miningBeam.inner);
+    scene.remove(_miningBeam.outer);
+    scene.remove(_miningBeam.light);
+    _miningBeam = null;
+  }
+  if (completed && _miningTgt) {
+    world.mineAsteroid(_miningTgt);
+    hud.setMiningProgress(1);
+    setTimeout(() => hud.setMiningProgress(null), 1400);
+  } else {
+    hud.setMiningProgress(null);
+  }
+  _miningTgt = null;
+}
+
 // ── FIRE button callback ──────────────────────────────────────────────────────
 hud.setFireCallback(() => {
   if (!currentTarget) return;
@@ -155,6 +264,9 @@ hud.setFireCallback(() => {
   rockets.fire(turretPos, currentTarget);
   hud.triggerFireCooldown(600);
 });
+
+hud.setMineCallback(() => startMining());
+hud.setWarpCallback(() => doWarp());
 
 // ── Targeting ─────────────────────────────────────────────────────────────────
 // Click (not drag) on any world object to lock it as the current target.
@@ -196,6 +308,83 @@ canvas.addEventListener('mouseup', e => {
     currentTarget = null;
     hud.clearTarget();
   }
+});
+
+// ── Context menu (right-click) ────────────────────────────────────────────────
+// Shows a list of named objects in space with their distances.
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+
+  const items = [];
+
+  // Planets
+  for (const mesh of world.namedTargetables) {
+    if (mesh.userData.type === 'Asteroid Field') continue;
+    mesh.getWorldPosition(_tgtWorldPos);
+    const dist = ship.position.distanceTo(_tgtWorldPos);
+    items.push({
+      category: 'Planet',
+      label:    mesh.userData.label,
+      subtype:  mesh.userData.type,
+      dist,
+      onSelect: () => {
+        currentTarget = mesh;
+        hud.setTarget(mesh.userData.label, mesh.userData.type, false);
+      },
+    });
+  }
+
+  // Asteroid Fields
+  for (const mesh of world.namedTargetables) {
+    if (mesh.userData.type !== 'Asteroid Field') continue;
+    mesh.getWorldPosition(_tgtWorldPos);
+    const dist = ship.position.distanceTo(_tgtWorldPos);
+    items.push({
+      category: 'Asteroid Field',
+      label:    mesh.userData.label,
+      subtype:  mesh.userData.type,
+      dist,
+      onSelect: () => {
+        currentTarget = mesh;
+        hud.setTarget(mesh.userData.label, mesh.userData.type, false);
+      },
+    });
+  }
+
+  // NPC ships (alive only)
+  for (const npcShip of fleet.ships) {
+    if (npcShip._state === 'dead') continue;
+    npcShip.group.getWorldPosition(_tgtWorldPos);
+    const dist = ship.position.distanceTo(_tgtWorldPos);
+    const lbl  = npcShip.fuselage.userData.label;
+    items.push({
+      category: 'Contact',
+      label:    lbl,
+      subtype:  'Hostile Fighter',
+      dist,
+      onSelect: () => {
+        currentTarget = npcShip.fuselage;
+        hud.setTarget(lbl, 'Hostile Fighter', true);
+      },
+    });
+  }
+
+  // Sort each category's entries by distance
+  items.sort((a, b) => {
+    if (a.category !== b.category) return 0; // keep category order
+    return a.dist - b.dist;
+  });
+
+  hud.showContextMenu(items, e.clientX, e.clientY);
+});
+
+// Close context menu on any left- or middle-click (not right-click, which opens it)
+document.addEventListener('mousedown', e => {
+  if (e.button !== 2) hud.hideContextMenu();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') hud.hideContextMenu();
 });
 
 // ── Camera ────────────────────────────────────────────────────────────────────
@@ -259,6 +448,7 @@ const clock = new THREE.Clock();
   fleet.update(delta, ship.position, elapsed);
   rockets.update(delta, fleet);
   stars.update(ship.position);
+  _warpCooldown = Math.max(0, _warpCooldown - delta);
 
   // Orbit camera: always follows ship, mouse drag to rotate, scroll to zoom
   const sinPhi = Math.sin(inspPhi);
@@ -286,6 +476,46 @@ const clock = new THREE.Clock();
     if (npc) {
       const h = npc.healthPct;
       hud.updateTargetHealth(h.shield, h.armor, h.hull);
+    }
+
+    // Show Mine button when targeting a nearby rocky body (not while actively mining)
+    if (!_isMining) {
+      const t = currentTarget.userData.type;
+      const isRock = t === 'Rocky Body' || t === 'Large Rocky Body' || t === 'Space Fragment';
+      hud.showMineButton(isRock && dist <= MINE_RANGE, currentTarget.userData.mined === true);
+    }
+
+    // Show Warp button when target is far enough and drive is ready
+    hud.showWarpButton(
+      _warpCooldown <= 0 && dist > WARP_MIN_DIST,
+      currentTarget.userData.label,
+    );
+  } else if (!_isMining) {
+    hud.showMineButton(false, false);
+    hud.showWarpButton(false);
+  }
+
+  // ── Mining beam update ─────────────────────────────────────────────────
+  if (_isMining && _miningTgt) {
+    if (_miningTgt !== currentTarget) {
+      // Target changed — abort
+      stopMining(false);
+    } else {
+      _miningAccum += delta;
+      const pct = Math.min(_miningAccum / MINE_DURATION, 1);
+      hud.setMiningProgress(pct);
+
+      // Stretch the beam from nose to asteroid each frame
+      const [nosePos] = ship.getTurretPositions();
+      _positionBeam(_miningBeam, nosePos, _tgtWorldPos);
+
+      // Pulsing glow
+      const pulse = 0.6 + Math.sin(elapsed * 18) * 0.4;
+      _miningBeam.innerMat.opacity = 0.9 * pulse;
+      _miningBeam.outerMat.opacity = 0.22 * pulse;
+      _miningBeam.light.intensity  = 9 * pulse;
+
+      if (pct >= 1) stopMining(true);
     }
   }
 

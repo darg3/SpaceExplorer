@@ -10,6 +10,12 @@ const ASTEROID_MATS = [
   new THREE.MeshStandardMaterial({ color: 0x5a4838, roughness: 0.99, metalness: 0.01 }),
 ];
 
+// Depleted appearance after mining
+const DEPLETED_MAT = new THREE.MeshStandardMaterial({
+  color: 0x1e1a16, roughness: 0.99, metalness: 0.0,
+  emissive: 0x0a0905, emissiveIntensity: 0.15,
+});
+
 function makeAsteroid(radius) {
   // Use higher subdivision for large rocks; small ones don't need it
   const detail = radius > 28 ? 3 : 2;
@@ -134,16 +140,37 @@ function makePlanet({ pos, r, color, emissive, atmColor, ring, label, type }) {
   return { group, sphere };
 }
 
+// ── Distant Asteroid Fields ────────────────────────────────────────────────────
+const FIELD_DEFS = [
+  {
+    label:  'BELT ALPHA',
+    type:   'Asteroid Field',
+    pos:    new THREE.Vector3( 7500,  2000,  400),
+    radius: 260,
+    count:  10,
+  },
+  {
+    label:  'NEXUS BELT',
+    type:   'Asteroid Field',
+    pos:    new THREE.Vector3(-6500, -4000,  800),
+    radius: 290,
+    count:  10,
+  },
+];
+
 // ── World class ────────────────────────────────────────────────────────────────
 
 export class World {
   constructor(scene) {
-    this._scene     = scene;
-    this._asteroids = [];
-    this.targetables = []; // all meshes the raycaster can hit
+    this._scene          = scene;
+    this._asteroids      = [];
+    this._fieldMarkers   = [];
+    this.targetables     = []; // all meshes the raycaster can hit
+    this.namedTargetables = []; // planets + field markers (for context menu)
 
     this._buildAsteroids(scene);
     this._buildPlanets(scene);
+    this._buildAsteroidFields(scene);
   }
 
   _buildAsteroids(scene) {
@@ -177,6 +204,7 @@ export class World {
 
       // Targeting metadata — categorise by size
       mesh.userData.targetable = true;
+      mesh.userData.mined      = false;
       if (r > 45) {
         mesh.userData.label = 'MINOR PLANET';
         mesh.userData.type  = 'Large Rocky Body';
@@ -198,7 +226,74 @@ export class World {
     for (const def of PLANET_DEFS) {
       const { group, sphere } = makePlanet(def);
       scene.add(group);
-      this.targetables.push(sphere); // only the surface sphere, not atm/ring
+      this.targetables.push(sphere);      // only the surface sphere, not atm/ring
+      this.namedTargetables.push(sphere); // also in named list for context menu
+    }
+  }
+
+  _buildAsteroidFields(scene) {
+    for (const def of FIELD_DEFS) {
+      // ── 10 asteroids clustered around the field centre ──────────────────────
+      for (let i = 0; i < def.count; i++) {
+        const r    = 8 + Math.random() * Math.random() * 52;
+        const mesh = makeAsteroid(r);
+
+        // Uniform random point inside a sphere of the field's radius
+        const u     = Math.random();
+        const v     = Math.random();
+        const theta = 2 * Math.PI * u;
+        const phi   = Math.acos(2 * v - 1);
+        const rDist = def.radius * Math.cbrt(Math.random());
+
+        mesh.position.set(
+          def.pos.x + rDist * Math.sin(phi) * Math.cos(theta),
+          def.pos.y + rDist * Math.sin(phi) * Math.sin(theta),
+          def.pos.z + rDist * Math.cos(phi),
+        );
+        mesh.rotation.set(
+          Math.random() * Math.PI * 2,
+          Math.random() * Math.PI * 2,
+          Math.random() * Math.PI * 2,
+        );
+        mesh.userData.spin = new THREE.Vector3(
+          (Math.random() - 0.5) * 0.18,
+          (Math.random() - 0.5) * 0.18,
+          (Math.random() - 0.5) * 0.12,
+        );
+
+        mesh.userData.targetable = true;
+        mesh.userData.mined      = false;
+        mesh.userData.fieldLabel = def.label;
+        if (r > 45) {
+          mesh.userData.label = 'MINOR PLANET';
+          mesh.userData.type  = 'Large Rocky Body';
+        } else if (r > 20) {
+          mesh.userData.label = 'ASTEROID';
+          mesh.userData.type  = 'Rocky Body';
+        } else {
+          mesh.userData.label = 'DEBRIS';
+          mesh.userData.type  = 'Space Fragment';
+        }
+
+        scene.add(mesh);
+        this._asteroids.push(mesh);
+        this.targetables.push(mesh);
+      }
+
+      // ── Field marker — faint glowing sphere, acts as targetable anchor ─────
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(30, 10, 10),
+        new THREE.MeshBasicMaterial({
+          color: 0x336688, transparent: true, opacity: 0.22,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        }),
+      );
+      marker.position.copy(def.pos);
+      marker.userData = { targetable: true, label: def.label, type: def.type };
+      scene.add(marker);
+      this.targetables.push(marker);
+      this.namedTargetables.push(marker);
+      this._fieldMarkers.push(marker);
     }
   }
 
@@ -210,10 +305,21 @@ export class World {
     }
   }
 
+  // Mark an asteroid as depleted after mining.
+  mineAsteroid(mesh) {
+    mesh.userData.mined = true;
+    mesh.material = DEPLETED_MAT;
+  }
+
   dispose() {
     for (const ast of this._asteroids) {
       ast.geometry.dispose();
       this._scene.remove(ast);
+    }
+    for (const m of this._fieldMarkers) {
+      m.geometry.dispose();
+      m.material.dispose();
+      this._scene.remove(m);
     }
   }
 }

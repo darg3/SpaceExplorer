@@ -464,6 +464,171 @@ export class HUD {
   opacity: 0.45;
   pointer-events: none;
 }
+
+/* ── WARP button ──────────────────────────────────────── */
+.warp-btn {
+  color: #cc88ff !important;
+  text-shadow: 0 0 10px rgba(180, 100, 255, 0.8) !important;
+}
+.warp-btn:hover {
+  background: rgba(30, 0, 55, 0.98) !important;
+}
+.warp-btn:hover::before {
+  border-color: rgba(180, 100, 255, 0.7) !important;
+}
+.warp-btn.cooldown {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ── MINE button ──────────────────────────────────────── */
+.mine-btn {
+  color: #33ff99 !important;
+  text-shadow: 0 0 10px rgba(50, 255, 150, 0.8) !important;
+}
+.mine-btn:hover {
+  background: rgba(0, 40, 20, 0.98) !important;
+}
+.mine-btn:hover::before {
+  border-color: rgba(50, 255, 150, 0.7) !important;
+}
+.mine-btn.mining {
+  color: #ffcc00 !important;
+  text-shadow: 0 0 10px rgba(255, 200, 0, 0.8) !important;
+  pointer-events: none;
+}
+.mine-btn.done {
+  color: #aaffcc !important;
+  text-shadow: none !important;
+  pointer-events: none;
+}
+.mine-btn.depleted {
+  color: rgba(80, 110, 90, 0.5) !important;
+  text-shadow: none !important;
+}
+
+/* ── Warp flash overlay ───────────────────────────────── */
+#warp-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: radial-gradient(ellipse 80% 55% at center,
+    rgba(255, 255, 255, 1.0)    0%,
+    rgba(160, 210, 255, 0.96)  28%,
+    rgba(70,  130, 255, 0.80)  58%,
+    rgba(0,   30,  120, 0.0)  100%
+  );
+  transition: opacity 0.22s ease-in;
+}
+#warp-flash.fade-out {
+  transition: opacity 0.75s ease-out;
+}
+.warp-flash-label {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: 0.38em;
+  color: rgba(0, 40, 130, 0.85);
+  text-transform: uppercase;
+  opacity: 0;
+  transform: scaleX(2.5);
+  transition: opacity 0.12s ease-in, transform 0.22s ease-in;
+}
+.warp-flash-dest {
+  font-family: 'Courier New', monospace;
+  font-size: 20px;
+  letter-spacing: 0.2em;
+  color: rgba(0, 20, 100, 0.9);
+  text-transform: uppercase;
+  text-shadow: 0 0 24px rgba(100, 180, 255, 0.9);
+  opacity: 0;
+  transform: scaleX(2.5);
+  transition: opacity 0.12s ease-in, transform 0.22s ease-in;
+}
+#warp-flash.active .warp-flash-label,
+#warp-flash.active .warp-flash-dest {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+/* ── Context menu ─────────────────────────────────────── */
+#ctx-menu {
+  position: fixed;
+  background: rgba(0, 7, 22, 0.97);
+  border: 1px solid rgba(0, 180, 255, 0.4);
+  clip-path: polygon(
+    0% 0%, calc(100% - 16px) 0%,
+    100% 16px, 100% 100%,
+    16px 100%, 0% calc(100% - 16px)
+  );
+  min-width: 240px;
+  z-index: 30;
+  pointer-events: auto;
+  filter: drop-shadow(0 0 10px rgba(0, 140, 255, 0.4));
+  animation: ctx-in 0.12s ease forwards;
+  user-select: none;
+}
+@keyframes ctx-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.ctx-header {
+  padding: 8px 14px 7px;
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  color: rgba(0, 210, 255, 0.85);
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0, 200, 255, 0.5);
+  border-bottom: 1px solid rgba(0, 180, 255, 0.2);
+  background: rgba(0, 30, 60, 0.4);
+}
+.ctx-section {
+  padding: 5px 14px 3px;
+  font-size: 8px;
+  letter-spacing: 0.22em;
+  color: rgba(255, 140, 0, 0.7);
+  text-transform: uppercase;
+  border-top: 1px solid rgba(255, 140, 0, 0.12);
+  margin-top: 2px;
+}
+.ctx-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 14px 6px 20px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.ctx-item:hover {
+  background: rgba(0, 100, 200, 0.25);
+}
+.ctx-item-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #00e5ff;
+  text-shadow: 0 0 6px rgba(0, 229, 255, 0.4);
+}
+.ctx-item-sub {
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  color: rgba(140, 200, 255, 0.45);
+  text-transform: uppercase;
+  margin-left: 8px;
+  flex: 1;
+}
+.ctx-item-dist {
+  font-size: 10px;
+  color: rgba(0, 200, 200, 0.65);
+  letter-spacing: 0.04em;
+  margin-left: 10px;
+  white-space: nowrap;
+}
     `;
     document.head.appendChild(style);
   }
@@ -572,14 +737,43 @@ export class HUD {
             <button id="btn-fire" class="fire-btn">&#9650; Fire Rockets</button>
           </div>
 
+          <div id="mine-btn-row" style="display:none">
+            <div class="hud-sep"></div>
+            <div class="hud-buttons">
+              <button id="btn-mine" class="mine-btn">&#9671; Mine Asteroid</button>
+            </div>
+          </div>
+
+          <div id="warp-btn-row" style="display:none">
+            <div class="hud-sep"></div>
+            <div class="hud-buttons">
+              <button id="btn-warp" class="warp-btn">&#9889; Warp To Target</button>
+            </div>
+          </div>
+
         </div>
       </div>
     `;
     document.body.appendChild(this._el);
 
+    // Warp flash overlay — appended separately so it sits above everything
+    const flash = document.createElement('div');
+    flash.id = 'warp-flash';
+    flash.innerHTML = `
+      <span class="warp-flash-label">&#9889; Warp Drive Engaged</span>
+      <span class="warp-flash-dest" id="warp-dest-name"></span>
+    `;
+    document.body.appendChild(flash);
+    this._warpFlash    = flash;
+    this._warpDestName = flash.querySelector('#warp-dest-name');
+
     this._thrusterBtn   = this._el.querySelector('#btn-thrusters');
     this._stopBtn       = this._el.querySelector('#btn-stop');
     this._fireBtn       = this._el.querySelector('#btn-fire');
+    this._mineBtnRow    = this._el.querySelector('#mine-btn-row');
+    this._mineBtn       = this._el.querySelector('#btn-mine');
+    this._warpBtnRow    = this._el.querySelector('#warp-btn-row');
+    this._warpBtn       = this._el.querySelector('#btn-warp');
     this._speedFill     = this._el.querySelector('#spd-fill');
     this._speedNum      = this._el.querySelector('#spd-num');
     this._speedTrack    = this._el.querySelector('.hud-speed-track');
@@ -597,7 +791,10 @@ export class HUD {
   // ── Button events ─────────────────────────────────────────────────────────
 
   _bindButtons() {
-    this._onFire = null;   // set by main.js via setFireCallback()
+    this._onFire  = null;   // set by main.js via setFireCallback()
+    this._onMine  = null;   // set by main.js via setMineCallback()
+    this._onWarp  = null;   // set by main.js via setWarpCallback()
+    this._ctxMenu = null;   // currently open context menu DOM node
 
     this._thrusterBtn.addEventListener('mousedown', e => {
       e.stopPropagation();                          // block orbit-camera drag
@@ -643,6 +840,16 @@ export class HUD {
     this._fireBtn.addEventListener('mousedown', e => {
       e.stopPropagation();
       if (this._onFire) this._onFire();
+    });
+
+    this._mineBtn.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      if (this._onMine) this._onMine();
+    });
+
+    this._warpBtn.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      if (this._onWarp) this._onWarp();
     });
   }
 
@@ -720,6 +927,143 @@ export class HUD {
     _setBar(this._tgtBarShield, shield);
     _setBar(this._tgtBarArmor,  armor);
     _setBar(this._tgtBarHull,   hull);
+  }
+
+  // ── Mining API ────────────────────────────────────────────────────────────
+
+  setMineCallback(fn) { this._onMine = fn; }
+
+  // Show or hide the Mine Asteroid button.
+  // alreadyMined: true = show in "depleted" state (greyed, no pointer events).
+  showMineButton(show, alreadyMined = false) {
+    this._mineBtnRow.style.display = show ? '' : 'none';
+    if (show) {
+      this._mineBtn.classList.toggle('depleted', alreadyMined);
+      if (alreadyMined) {
+        this._mineBtn.innerHTML  = '&#9671; Depleted';
+        this._mineBtn.style.pointerEvents = 'none';
+      } else {
+        this._mineBtn.style.pointerEvents = '';
+      }
+    }
+  }
+
+  // Update the mine button to reflect progress (0–1), or null to reset.
+  setMiningProgress(pct) {
+    if (pct === null) {
+      this._mineBtn.innerHTML = '&#9671; Mine Asteroid';
+      this._mineBtn.classList.remove('mining', 'done');
+    } else if (pct >= 1) {
+      this._mineBtn.innerHTML = '&#10003; Resource Acquired';
+      this._mineBtn.classList.remove('mining');
+      this._mineBtn.classList.add('done');
+    } else {
+      this._mineBtn.innerHTML = `&#9671; Mining... ${Math.round(pct * 100)}%`;
+      this._mineBtn.classList.add('mining');
+      this._mineBtn.classList.remove('done');
+    }
+  }
+
+  // ── Warp API ──────────────────────────────────────────────────────────────
+
+  setWarpCallback(fn) { this._onWarp = fn; }
+
+  // Show or hide the Warp button; label is the target's name.
+  showWarpButton(show, label = 'Target') {
+    this._warpBtnRow.style.display = show ? '' : 'none';
+    if (show) this._warpBtn.innerHTML = `&#9889; Warp To ${label}`;
+  }
+
+  // Full-screen hyperspace flash; calls onPeak() when screen is fully white
+  // so the caller can teleport the ship while nothing is visible.
+  triggerWarpFlash(destLabel, onPeak) {
+    const el = this._warpFlash;
+    this._warpDestName.textContent = destLabel;
+    el.classList.remove('fade-out', 'active');
+
+    // Force reflow so the transition fires cleanly
+    el.offsetWidth;                           // eslint-disable-line no-unused-expressions
+
+    el.style.opacity = '1';
+    el.classList.add('active');
+
+    setTimeout(() => {
+      onPeak();
+      el.classList.add('fade-out');
+      el.classList.remove('active');
+      el.style.opacity = '0';
+      setTimeout(() => el.classList.remove('fade-out'), 800);
+    }, 240);
+  }
+
+  // ── Context menu API ──────────────────────────────────────────────────────
+
+  // Show a sci-fi context menu at (x, y) with the given items.
+  // items: [{ category, label, subtype, dist, onSelect }]
+  showContextMenu(items, x, y) {
+    this.hideContextMenu();
+
+    const menu = document.createElement('div');
+    menu.id = 'ctx-menu';
+
+    // Group by category, preserving insertion order
+    const cats = {};
+    for (const item of items) {
+      if (!cats[item.category]) cats[item.category] = [];
+      cats[item.category].push(item);
+    }
+
+    let html = `<div class="ctx-header">&#9670; Spatial Objects</div>`;
+    for (const [cat, list] of Object.entries(cats)) {
+      html += `<div class="ctx-section">${cat}</div>`;
+      for (let i = 0; i < list.length; i++) {
+        const it = list[i];
+        const d  = it.dist;
+        const ds = d < 1000 ? `${Math.round(d)} km`
+                 : d < 1e6  ? `${(d / 1000).toFixed(1)} Mm`
+                 :             `${(d / 1e6).toFixed(2)} Gm`;
+        html += `
+          <div class="ctx-item" data-cat="${cat}" data-idx="${i}">
+            <span class="ctx-item-label">${it.label}</span>
+            <span class="ctx-item-sub">${it.subtype}</span>
+            <span class="ctx-item-dist">${ds}</span>
+          </div>`;
+      }
+    }
+
+    menu.innerHTML = html;
+
+    // Position, clamped so the menu doesn't overflow the right/bottom edge
+    const W = window.innerWidth, H = window.innerHeight;
+    menu.style.left = `${Math.min(x, W - 260)}px`;
+    menu.style.top  = `${Math.min(y, H - 40)}px`;  // rough estimate; adjusts after render
+
+    // Wire item clicks
+    menu.querySelectorAll('.ctx-item').forEach(el => {
+      const cat = el.dataset.cat;
+      const idx = parseInt(el.dataset.idx);
+      el.addEventListener('mousedown', e => {
+        e.stopPropagation();
+        cats[cat][idx].onSelect();
+        this.hideContextMenu();
+      });
+    });
+
+    document.body.appendChild(menu);
+    this._ctxMenu = menu;
+
+    // Re-clamp vertically now that we know the actual height
+    requestAnimationFrame(() => {
+      if (!this._ctxMenu) return;
+      const rect = menu.getBoundingClientRect();
+      if (rect.bottom > H - 8) {
+        menu.style.top = `${Math.max(8, H - rect.height - 8)}px`;
+      }
+    });
+  }
+
+  hideContextMenu() {
+    if (this._ctxMenu) { this._ctxMenu.remove(); this._ctxMenu = null; }
   }
 
   // Keep THRUSTERS button label/style in sync with ship.engineOn.
