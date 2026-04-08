@@ -1,3 +1,11 @@
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Update a bar-row's fill width and percentage text.
+function _setBar(row, pct) {
+  row.querySelector('.bar-fill').style.width = pct + '%';
+  row.querySelector('.bar-pct').textContent  = Math.round(pct) + '%';
+}
+
 // ── HUD ───────────────────────────────────────────────────────────────────────
 // Injects a fixed HTML overlay onto the page (no Three.js required).
 // Displays Shield / Armor / Hull health bars and two engine control buttons.
@@ -440,6 +448,22 @@ export class HUD {
 .hud-buttons button.off::before {
   border-color: rgba(60, 90, 120, 0.2);
 }
+
+/* ── FIRE button ──────────────────────────────────────── */
+.fire-btn {
+  color: #ff6622 !important;
+  text-shadow: 0 0 10px rgba(255, 100, 30, 0.8) !important;
+}
+.fire-btn:hover {
+  background: rgba(80, 20, 0, 0.98) !important;
+}
+.fire-btn:hover::before {
+  border-color: rgba(255, 100, 30, 0.7) !important;
+}
+.fire-btn.cooldown {
+  opacity: 0.45;
+  pointer-events: none;
+}
     `;
     document.head.appendChild(style);
   }
@@ -462,6 +486,26 @@ export class HUD {
           <div class="tgt-dist-row">
             <span class="tgt-dist-label">Dist</span>
             <span class="tgt-dist-val" id="tgt-dist">---</span>
+          </div>
+
+          <!-- Enemy health bars — shown only when target is an NPC -->
+          <div id="tgt-enemy-bars" style="display:none">
+            <div class="hud-sep" style="margin:7px 0 9px"></div>
+            <div class="bar-row bar-shield" id="tgt-bar-s">
+              <span class="bar-label">Shield</span>
+              <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+              <span class="bar-pct">100%</span>
+            </div>
+            <div class="bar-row bar-armor" id="tgt-bar-a">
+              <span class="bar-label">Armor</span>
+              <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+              <span class="bar-pct">100%</span>
+            </div>
+            <div class="bar-row bar-hull" id="tgt-bar-h">
+              <span class="bar-label">Hull</span>
+              <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+              <span class="bar-pct">100%</span>
+            </div>
           </div>
         </div>
       </div>
@@ -522,26 +566,39 @@ export class HUD {
             <button id="btn-stop">&#9632; Stop Ship</button>
           </div>
 
+          <div class="hud-sep"></div>
+
+          <div class="hud-buttons">
+            <button id="btn-fire" class="fire-btn">&#9650; Fire Rockets</button>
+          </div>
+
         </div>
       </div>
     `;
     document.body.appendChild(this._el);
 
-    this._thrusterBtn = this._el.querySelector('#btn-thrusters');
-    this._stopBtn     = this._el.querySelector('#btn-stop');
-    this._speedFill   = this._el.querySelector('#spd-fill');
-    this._speedNum    = this._el.querySelector('#spd-num');
-    this._speedTrack  = this._el.querySelector('.hud-speed-track');
-    this._tgtPanel    = this._el.querySelector('#tgt-panel');
-    this._tgtName     = this._el.querySelector('#tgt-name');
-    this._tgtType     = this._el.querySelector('#tgt-type');
-    this._tgtDist     = this._el.querySelector('#tgt-dist');
-    this._tgtReticle  = this._el.querySelector('#tgt-reticle');
+    this._thrusterBtn   = this._el.querySelector('#btn-thrusters');
+    this._stopBtn       = this._el.querySelector('#btn-stop');
+    this._fireBtn       = this._el.querySelector('#btn-fire');
+    this._speedFill     = this._el.querySelector('#spd-fill');
+    this._speedNum      = this._el.querySelector('#spd-num');
+    this._speedTrack    = this._el.querySelector('.hud-speed-track');
+    this._tgtPanel      = this._el.querySelector('#tgt-panel');
+    this._tgtName       = this._el.querySelector('#tgt-name');
+    this._tgtType       = this._el.querySelector('#tgt-type');
+    this._tgtDist       = this._el.querySelector('#tgt-dist');
+    this._tgtReticle    = this._el.querySelector('#tgt-reticle');
+    this._enemyBars     = this._el.querySelector('#tgt-enemy-bars');
+    this._tgtBarShield  = this._el.querySelector('#tgt-bar-s');
+    this._tgtBarArmor   = this._el.querySelector('#tgt-bar-a');
+    this._tgtBarHull    = this._el.querySelector('#tgt-bar-h');
   }
 
   // ── Button events ─────────────────────────────────────────────────────────
 
   _bindButtons() {
+    this._onFire = null;   // set by main.js via setFireCallback()
+
     this._thrusterBtn.addEventListener('mousedown', e => {
       e.stopPropagation();                          // block orbit-camera drag
       this._ship.setEngine(!this._ship.engineOn);
@@ -582,15 +639,22 @@ export class HUD {
     });
 
     document.addEventListener('mouseup', () => { dragging = false; });
+
+    this._fireBtn.addEventListener('mousedown', e => {
+      e.stopPropagation();
+      if (this._onFire) this._onFire();
+    });
   }
 
   // ── Targeting API (called by main.js) ────────────────────────────────────
 
   // Show the target panel with the locked object's name and type.
-  setTarget(label, type) {
+  // isEnemy=true reveals the enemy health bars (NPC ships only).
+  setTarget(label, type, isEnemy = false) {
     this._tgtName.textContent = label;
     this._tgtType.textContent = type;
     this._tgtDist.textContent = '---';
+    this._enemyBars.style.display = isEnemy ? '' : 'none';
     // Reset entry animation by forcing reflow
     this._tgtPanel.style.animation = 'none';
     this._tgtPanel.offsetWidth;      // reflow
@@ -603,6 +667,7 @@ export class HUD {
   clearTarget() {
     this._tgtPanel.style.display   = 'none';
     this._tgtReticle.style.display = 'none';
+    this._enemyBars.style.display  = 'none';
   }
 
   // Called every frame while a target is locked.
@@ -637,6 +702,24 @@ export class HUD {
     this._speedFill.classList.toggle('boost', isBoosting);
     this._speedNum.innerHTML = Math.round(s) + ' <small>m/s</small>';
     this._speedNum.classList.toggle('boost', isBoosting);
+  }
+
+  // ── Combat API ────────────────────────────────────────────────────────────
+
+  // Register the callback invoked when the FIRE button is pressed.
+  setFireCallback(fn) { this._onFire = fn; }
+
+  // Grey out the FIRE button for `ms` milliseconds (rate limiting).
+  triggerFireCooldown(ms = 600) {
+    this._fireBtn.classList.add('cooldown');
+    setTimeout(() => this._fireBtn.classList.remove('cooldown'), ms);
+  }
+
+  // Update the enemy health bars in the target panel (called every frame).
+  updateTargetHealth(shield, armor, hull) {
+    _setBar(this._tgtBarShield, shield);
+    _setBar(this._tgtBarArmor,  armor);
+    _setBar(this._tgtBarHull,   hull);
   }
 
   // Keep THRUSTERS button label/style in sync with ship.engineOn.

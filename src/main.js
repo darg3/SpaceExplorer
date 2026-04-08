@@ -4,6 +4,8 @@ import { Stars }        from './stars.js';
 import { InputHandler } from './input.js';
 import { World }        from './world.js';
 import { HUD }          from './hud.js';
+import { NPCFleet }     from './npcs.js';
+import { RocketManager } from './rockets.js';
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 const canvas   = document.getElementById('game');
@@ -138,8 +140,21 @@ const stars = new Stars(scene);
 const world = new World(scene);
 
 // ── Ship ──────────────────────────────────────────────────────────────────────
-const ship = new Ship(scene, input);
-const hud  = new HUD(ship);
+const ship    = new Ship(scene, input);
+const hud     = new HUD(ship);
+const fleet   = new NPCFleet(scene);
+const rockets = new RocketManager(scene);
+let   elapsed = 0;
+
+// ── FIRE button callback ──────────────────────────────────────────────────────
+hud.setFireCallback(() => {
+  if (!currentTarget) return;
+  const npc = fleet.shipForMesh(currentTarget);
+  if (!npc || npc._state === 'dead') return;
+  const [turretPos] = ship.getTurretPositions();
+  rockets.fire(turretPos, currentTarget);
+  hud.triggerFireCooldown(600);
+});
 
 // ── Targeting ─────────────────────────────────────────────────────────────────
 // Click (not drag) on any world object to lock it as the current target.
@@ -166,7 +181,7 @@ canvas.addEventListener('mouseup', e => {
   _mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(_mouse, camera);
 
-  const hits = raycaster.intersectObjects(world.targetables);
+  const hits = raycaster.intersectObjects([...world.targetables, ...fleet.targetables]);
   if (hits.length > 0) {
     const hit = hits[0].object;
     if (hit === currentTarget) {
@@ -174,7 +189,8 @@ canvas.addEventListener('mouseup', e => {
       hud.clearTarget();
     } else {
       currentTarget = hit;
-      hud.setTarget(hit.userData.label, hit.userData.type);
+      const isEnemy = hit.userData.type === 'Hostile Fighter';
+      hud.setTarget(hit.userData.label, hit.userData.type, isEnemy);
     }
   } else {
     currentTarget = null;
@@ -239,6 +255,9 @@ const clock = new THREE.Clock();
   ship.update(delta);
   hud.update();
   world.update(delta);
+  elapsed += delta;
+  fleet.update(delta, ship.position, elapsed);
+  rockets.update(delta, fleet);
   stars.update(ship.position);
 
   // Orbit camera: always follows ship, mouse drag to rotate, scroll to zoom
@@ -261,6 +280,13 @@ const clock = new THREE.Clock();
     const sx = ( proj.x * 0.5 + 0.5) * window.innerWidth;
     const sy = (-proj.y * 0.5 + 0.5) * window.innerHeight;
     hud.updateTarget(dist, sx, sy, proj.z < 1.0);
+
+    // Update enemy health bars when targeting an NPC ship
+    const npc = fleet.shipForMesh(currentTarget);
+    if (npc) {
+      const h = npc.healthPct;
+      hud.updateTargetHealth(h.shield, h.armor, h.hull);
+    }
   }
 
   renderer.render(scene, camera);
