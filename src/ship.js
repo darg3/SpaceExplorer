@@ -1,15 +1,15 @@
 import * as THREE from 'three';
 
 // ── Tuning ────────────────────────────────────────────────────────────────────
-const CRUISE_SPEED        = 180;   // world units / second
-const BOOST_SPEED         = 500;
+const CRUISE_SPEED        = 400;   // world units / second
+const BOOST_SPEED         = 1000;
 const PITCH_RATE          = 1.2;   // radians / second
 const YAW_RATE            = 1.2;
 const ROLL_RATE           = 1.8;
 const THRUSTER_UP_RATE    = 3.0;
 const THRUSTER_DOWN_RATE  = 1.8;
-const PARTICLE_COUNT      = 400;
-const PARTICLE_EMIT_RATE  = 60;
+const PARTICLE_COUNT      = 600;
+const PARTICLE_EMIT_RATE  = 80;
 
 // ── Reusable temporaries (avoid GC) ──────────────────────────────────────────
 const _fwd    = new THREE.Vector3();
@@ -30,6 +30,9 @@ export class Ship {
     this._input  = input;
     this.group   = new THREE.Group();
     this.thrusterIntensity = 0.45;
+    this.engineOn          = true;          // toggled by HUD buttons; false = no thrust, glow fades to 0
+    this.targetSpeed       = CRUISE_SPEED;  // desired speed set by HUD bar (0–BOOST_SPEED)
+    this.speed             = 0;             // lerped current speed (m/s), read by HUD each frame
     this._emitAccum      = 0;
     this._nextParticle   = 0;
 
@@ -53,19 +56,19 @@ export class Ship {
     });
 
     // Fuselage (tapered cylinder lying along +X)
-    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(7, 16, 90, 10), body);
+    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(7, 16, 90, 20), body);
     fuselage.rotation.z = -Math.PI / 2;
     this.group.add(fuselage);
 
     // Nose cone
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(7, 38, 10), accent);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(7, 38, 20), accent);
     nose.rotation.z = -Math.PI / 2;
     nose.position.x = 64;
     this.group.add(nose);
 
     // Cockpit dome
     const cockpit = new THREE.Mesh(
-      new THREE.SphereGeometry(9, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      new THREE.SphereGeometry(9, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.55),
       glass,
     );
     cockpit.position.set(18, 8, 0);
@@ -85,12 +88,12 @@ export class Ship {
       stripe.rotation.z = side * 0.18;
       this.group.add(stripe);
 
-      const pod = new THREE.Mesh(new THREE.CylinderGeometry(5, 6.5, 28, 8), dark);
+      const pod = new THREE.Mesh(new THREE.CylinderGeometry(5, 6.5, 28, 16), dark);
       pod.rotation.z = -Math.PI / 2;
       pod.position.set(-22, side * 40, 0);
       this.group.add(pod);
 
-      const nozzleRing = new THREE.Mesh(new THREE.TorusGeometry(5.5, 1.2, 8, 16), accent);
+      const nozzleRing = new THREE.Mesh(new THREE.TorusGeometry(5.5, 1.2, 12, 32), accent);
       nozzleRing.rotation.y = Math.PI / 2;
       nozzleRing.position.set(-37, side * 40, 0);
       this.group.add(nozzleRing);
@@ -205,6 +208,11 @@ export class Ship {
   get position()   { return this.group.position; }
   get quaternion() { return this.group.quaternion; }
 
+  // ── Engine control (called by HUD) ──────────────────────────────────────
+  setEngine(on)        { this.engineOn = on; }
+  stopShip()           { this.engineOn = false; }
+  setTargetSpeed(s)    { this.targetSpeed = THREE.MathUtils.clamp(s, 0, BOOST_SPEED); }
+
   // ── Update (call every frame) ─────────────────────────────────────────────
 
   update(delta) {
@@ -227,12 +235,22 @@ export class Ship {
     }
 
     // ── Fly forward along local +X ────────────────────────────────────────
-    const speed = boost ? BOOST_SPEED : CRUISE_SPEED;
-    _fwd.set(1, 0, 0).applyQuaternion(this.group.quaternion);
-    this.group.position.addScaledVector(_fwd, speed * delta);
+    if (this.engineOn) {
+      const speed = boost ? BOOST_SPEED : this.targetSpeed;
+      _fwd.set(1, 0, 0).applyQuaternion(this.group.quaternion);
+      this.group.position.addScaledVector(_fwd, speed * delta);
+    }
+
+    // ── Lerped speed (for HUD readout) ───────────────────────────────────
+    const _targetSpeed = this.engineOn ? (boost ? BOOST_SPEED : this.targetSpeed) : 0;
+    this.speed = THREE.MathUtils.lerp(this.speed, _targetSpeed, Math.min(delta * 5, 1));
 
     // ── Thruster intensity ────────────────────────────────────────────────
-    const targetT = boost ? 1.0 : 0.45;
+    // Scale glow proportionally to targetSpeed so the nozzle dims at low speed.
+    // Formula gives 0.1 (faint idle) at 0 m/s → 0.46 at 400 → 1.0 at 1000.
+    const targetT = this.engineOn
+      ? (boost ? 1.0 : 0.1 + (this.targetSpeed / BOOST_SPEED) * 0.9)
+      : 0;
     const rate    = targetT > this.thrusterIntensity ? THRUSTER_UP_RATE : THRUSTER_DOWN_RATE;
     this.thrusterIntensity = THREE.MathUtils.clamp(
       this.thrusterIntensity + (targetT - this.thrusterIntensity) * Math.min(delta * rate * 3, 1),
