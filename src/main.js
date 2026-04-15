@@ -5,8 +5,9 @@ import { InputHandler } from './input.js';
 import { World }        from './world.js';
 import { HUD }          from './hud.js';
 import { NPCFleet }     from './npcs.js';
-import { RocketManager } from './rockets.js';
-import { Menu }         from './menu.js';
+import { RocketManager }  from './rockets.js';
+import { Menu }           from './menu.js';
+import { MobileControls } from './mobile.js';
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 const canvas   = document.getElementById('game');
@@ -427,6 +428,18 @@ window.addEventListener('mousemove', e => {
 window.addEventListener('wheel', e => {
   inspRadius = THREE.MathUtils.clamp(inspRadius + e.deltaY * 0.4, 60, 800);
 }, { passive: true });
+
+new MobileControls(
+  input,
+  (dx, dy) => {
+    inspTheta -= dx * 0.007;
+    inspPhi = THREE.MathUtils.clamp(inspPhi + dy * 0.007, 0.05, Math.PI - 0.05);
+  },
+  delta => {
+    // pinch apart (positive delta) = zoom in = decrease radius
+    inspRadius = THREE.MathUtils.clamp(inspRadius - delta * 0.4, 60, 800);
+  },
+);
 
 // ── Animation Loop ────────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
