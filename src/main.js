@@ -6,6 +6,7 @@ import { World }        from './world.js';
 import { HUD }          from './hud.js';
 import { NPCFleet }     from './npcs.js';
 import { RocketManager } from './rockets.js';
+import { Menu }         from './menu.js';
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 const canvas   = document.getElementById('game');
@@ -396,12 +397,6 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ── Hint fade ─────────────────────────────────────────────────────────────────
-setTimeout(() => {
-  const hint = document.getElementById('hint');
-  if (hint) hint.style.opacity = '0';
-}, 6000);
-
 // ── Orbit Camera ──────────────────────────────────────────────────────────────
 let inspTheta    = Math.PI;       // azimuth: π = behind ship (ship faces +X)
 let inspPhi      = Math.PI * 0.38; // elevation from Z (~68° — slightly above horizontal)
@@ -436,7 +431,14 @@ window.addEventListener('wheel', e => {
 // ── Animation Loop ────────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
 
-(function animate() {
+function startGame() {
+  const hint = document.getElementById('hint');
+  if (hint) {
+    hint.style.opacity = '1';
+    setTimeout(() => { hint.style.opacity = '0'; }, 6000);
+  }
+
+  (function animate() {
   requestAnimationFrame(animate);
 
   const delta = Math.min(clock.getDelta(), 0.05);
@@ -520,4 +522,7 @@ const clock = new THREE.Clock();
   }
 
   renderer.render(scene, camera);
-}());
+  }());
+}
+
+new Menu(() => startGame()).show();
