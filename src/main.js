@@ -24,7 +24,7 @@ const camera = new THREE.PerspectiveCamera(
   65,
   window.innerWidth / window.innerHeight,
   0.1,
-  12000,
+  200000,
 );
 // Initial position: behind and slightly above ship (ship faces +X)
 camera.position.set(-300, 0, 70);
@@ -448,7 +448,7 @@ window.addEventListener('mousemove', e => {
 });
 
 window.addEventListener('wheel', e => {
-  inspRadius = THREE.MathUtils.clamp(inspRadius + e.deltaY * 0.4, 60, 800);
+  inspRadius = THREE.MathUtils.clamp(inspRadius * Math.pow(1.001, e.deltaY), 60, 80000);
 }, { passive: true });
 
 new MobileControls(
@@ -459,7 +459,7 @@ new MobileControls(
   },
   delta => {
     // pinch apart (positive delta) = zoom in = decrease radius
-    inspRadius = THREE.MathUtils.clamp(inspRadius - delta * 0.4, 60, 800);
+    inspRadius = THREE.MathUtils.clamp(inspRadius * Math.pow(1.005, -delta), 60, 80000);
   },
 );
 
