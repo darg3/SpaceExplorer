@@ -507,6 +507,74 @@ export class HUD {
   text-shadow: none !important;
 }
 
+/* ── Damage vignette ──────────────────────────────────── */
+#damage-vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 200;
+  box-shadow: inset 0 0 120px rgba(255, 0, 0, 0.85);
+  opacity: 0;
+}
+@keyframes dmg-flash {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+#damage-vignette.flashing {
+  animation: dmg-flash 0.9s ease-out forwards;
+}
+
+/* ── Crosshair ────────────────────────────────────────── */
+#crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.75;
+}
+#crosshair::before,
+#crosshair::after {
+  content: '';
+  position: absolute;
+  background: #00e5ff;
+  box-shadow: 0 0 4px rgba(0, 229, 255, 0.7);
+}
+#crosshair::before {
+  width: 2px;
+  height: 100%;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+#crosshair::after {
+  height: 2px;
+  width: 100%;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+/* ── Hull critical warning ────────────────────────────── */
+@keyframes hull-warn {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(255,  0,  0, 0.0)) drop-shadow(0 0 22px rgba(0, 90, 220, 0.30)); }
+  50%       { filter: drop-shadow(0 0 18px rgba(255, 50, 50, 0.9)) drop-shadow(0 0 22px rgba(0, 90, 220, 0.30)); }
+}
+.hud-glow-wrap.hull-critical {
+  animation: hull-warn 0.8s ease-in-out infinite !important;
+}
+
+/* ── Fire cooldown countdown ──────────────────────────── */
+#fire-cooldown-num {
+  font-size: 10px;
+  margin-left: 6px;
+  opacity: 0.9;
+  color: #ff9955;
+}
+
 /* ── Warp flash overlay ───────────────────────────────── */
 #warp-flash {
   position: fixed;
@@ -734,7 +802,7 @@ export class HUD {
           <div class="hud-sep"></div>
 
           <div class="hud-buttons">
-            <button id="btn-fire" class="fire-btn">&#9650; Fire Rockets</button>
+            <button id="btn-fire" class="fire-btn">&#9650; Fire Rockets<span id="fire-cooldown-num" style="display:none"></span></button>
           </div>
 
           <div id="mine-btn-row" style="display:none">
@@ -753,8 +821,17 @@ export class HUD {
 
         </div>
       </div>
+
+      <!-- Fixed crosshair centered on screen -->
+      <div id="crosshair"></div>
     `;
     document.body.appendChild(this._el);
+
+    // Damage vignette — full viewport red flash on hit
+    const vignette = document.createElement('div');
+    vignette.id = 'damage-vignette';
+    document.body.appendChild(vignette);
+    this._damageVignette = vignette;
 
     // Warp flash overlay — appended separately so it sits above everything
     const flash = document.createElement('div');
@@ -786,6 +863,11 @@ export class HUD {
     this._tgtBarShield  = this._el.querySelector('#tgt-bar-s');
     this._tgtBarArmor   = this._el.querySelector('#tgt-bar-a');
     this._tgtBarHull    = this._el.querySelector('#tgt-bar-h');
+    this._plrBarShield  = this._el.querySelector('.hud-bars .bar-shield');
+    this._plrBarArmor   = this._el.querySelector('.hud-bars .bar-armor');
+    this._plrBarHull    = this._el.querySelector('.hud-bars .bar-hull');
+    this._hudGlowWrap   = this._el.querySelector('.hud-glow-wrap');
+    this._fireCooldownNum = this._el.querySelector('#fire-cooldown-num');
   }
 
   // ── Button events ─────────────────────────────────────────────────────────
@@ -916,10 +998,23 @@ export class HUD {
   // Register the callback invoked when the FIRE button is pressed.
   setFireCallback(fn) { this._onFire = fn; }
 
-  // Grey out the FIRE button for `ms` milliseconds (rate limiting).
+  // Grey out the FIRE button for `ms` milliseconds and show a countdown.
   triggerFireCooldown(ms = 600) {
     this._fireBtn.classList.add('cooldown');
-    setTimeout(() => this._fireBtn.classList.remove('cooldown'), ms);
+    const num = this._fireCooldownNum;
+    const end = performance.now() + ms;
+    num.style.display = '';
+    const tick = () => {
+      const remaining = end - performance.now();
+      if (remaining <= 0) {
+        this._fireBtn.classList.remove('cooldown');
+        num.style.display = 'none';
+        return;
+      }
+      num.textContent = ' ' + (remaining / 1000).toFixed(1) + 's';
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   }
 
   // Update the enemy health bars in the target panel (called every frame).
@@ -927,6 +1022,26 @@ export class HUD {
     _setBar(this._tgtBarShield, shield);
     _setBar(this._tgtBarArmor,  armor);
     _setBar(this._tgtBarHull,   hull);
+  }
+
+  // Update the player's own health bars.
+  setPlayerHealth(shield, armor, hull) {
+    _setBar(this._plrBarShield, shield);
+    _setBar(this._plrBarArmor,  armor);
+    _setBar(this._plrBarHull,   hull);
+  }
+
+  // Flash the red damage vignette on hit.
+  flashDamage() {
+    const v = this._damageVignette;
+    v.classList.remove('flashing');
+    void v.offsetWidth; // force reflow so animation restarts
+    v.classList.add('flashing');
+  }
+
+  // Toggle pulsing red warning when hull is critical.
+  setHullWarning(critical) {
+    this._hudGlowWrap.classList.toggle('hull-critical', critical);
   }
 
   // ── Mining API ────────────────────────────────────────────────────────────

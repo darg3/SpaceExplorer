@@ -205,6 +205,7 @@ export class World {
       // Targeting metadata — categorise by size
       mesh.userData.targetable = true;
       mesh.userData.mined      = false;
+      mesh.userData.radius     = r;
       if (r > 45) {
         mesh.userData.label = 'MINOR PLANET';
         mesh.userData.type  = 'Large Rocky Body';
@@ -304,6 +305,8 @@ export class World {
       ast.rotation.z += ast.userData.spin.z * delta;
     }
   }
+
+  get asteroids() { return this._asteroids; }
 
   // Mark an asteroid as depleted after mining.
   mineAsteroid(mesh) {

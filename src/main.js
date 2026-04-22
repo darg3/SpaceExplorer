@@ -5,8 +5,9 @@ import { InputHandler } from './input.js';
 import { World }        from './world.js';
 import { HUD }          from './hud.js';
 import { NPCFleet }     from './npcs.js';
-import { RocketManager } from './rockets.js';
-import { Menu }         from './menu.js';
+import { RocketManager }  from './rockets.js';
+import { Menu }           from './menu.js';
+import { MobileControls } from './mobile.js';
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 const canvas   = document.getElementById('game');
@@ -41,95 +42,117 @@ const rimLight = new THREE.DirectionalLight(0x4488ff, 0.6);
 rimLight.position.set(-200, -80, 100);
 scene.add(rimLight);
 
-// ── Skybox (nebula cube) ──────────────────────────────────────────────────────
-// Using a CubeTexture as scene.background avoids both problems of the old
-// sphere-mesh approach: pole stretching (equirectangular projection) and the
-// visible seam where the texture's left/right edges meet.  Each cube face is
-// an independent canvas, so there are no edge-matching requirements.
-// scene.background also sits at true infinity — no per-frame camera chase needed.
+// ── Skybox (seamless nebula sphere) ──────────────────────────────────────────
+// PMREMGenerator converts any equirectangular texture into a seamless cube-env
+// map with properly filtered face edges — no visible seams in any direction.
+// Falls back to a procedurally generated equirectangular canvas whose clouds
+// are defined in spherical coordinates so left/right edges wrap perfectly.
 
-// Shared cloud definitions: [cx, cy, radius, r, g, b, alpha]
-// More layers = richer nebula with overlapping colour regions
-const NEBULA_CLOUDS = [
-  [0.28, 0.42, 0.55,  110,  30, 190, 0.55],
-  [0.72, 0.58, 0.50,   30,  70, 210, 0.50],
-  [0.50, 0.28, 0.38,  200,  70,  35, 0.32],
-  [0.18, 0.75, 0.44,   30, 160, 210, 0.38],
-  [0.82, 0.20, 0.32,  170,  90, 230, 0.42],
-  [0.60, 0.80, 0.40,   60, 200, 160, 0.28],
-  [0.35, 0.15, 0.28,  230, 140,  40, 0.25],
-  // Extra layers for more depth and colour saturation
-  [0.45, 0.65, 0.30,   80, 20,  160, 0.22],
-  [0.10, 0.35, 0.42,  255, 80,   20, 0.18],
-  [0.88, 0.72, 0.36,   20, 180, 255, 0.20],
-  [0.65, 0.12, 0.25,  140, 200,  80, 0.15],
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+
+// Cloud centres as 3D unit-sphere directions + angular spread + colour
+const NEBULA_CLOUDS_3D = [
+  { dir: [ 0.60,  0.60,  0.52], spread: 0.55, r: 110, g:  30, b: 190, a: 0.55 },
+  { dir: [-0.55,  0.70,  0.46], spread: 0.50, r:  30, g:  70, b: 210, a: 0.50 },
+  { dir: [ 0.50, -0.50,  0.70], spread: 0.38, r: 200, g:  70, b:  35, a: 0.32 },
+  { dir: [-0.70, -0.50,  0.52], spread: 0.44, r:  30, g: 160, b: 210, a: 0.38 },
+  { dir: [ 0.80, -0.40, -0.45], spread: 0.32, r: 170, g:  90, b: 230, a: 0.42 },
+  { dir: [-0.60,  0.20, -0.78], spread: 0.40, r:  60, g: 200, b: 160, a: 0.28 },
+  { dir: [ 0.10,  0.90, -0.43], spread: 0.28, r: 230, g: 140, b:  40, a: 0.25 },
+  { dir: [-0.30, -0.80, -0.52], spread: 0.30, r:  80, g:  20, b: 160, a: 0.22 },
+  { dir: [ 0.90,  0.10,  0.43], spread: 0.42, r: 255, g:  80, b:  20, a: 0.18 },
+  { dir: [-0.10,  0.50, -0.86], spread: 0.36, r:  20, g: 180, b: 255, a: 0.20 },
+  { dir: [ 0.40, -0.90,  0.17], spread: 0.25, r: 140, g: 200, b:  80, a: 0.15 },
 ];
 
-function makeNebulaCubeFace(S, offX, offY) {
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = S;
-  const ctx = cv.getContext('2d');
-
-  ctx.fillStyle = '#00000e';
-  ctx.fillRect(0, 0, S, S);
-
-  for (const [cx, cy, r, cr, cg, cb, ca] of NEBULA_CLOUDS) {
-    // Shift cloud centres per face so each face looks distinct
-    const px  = ((cx + offX) % 1.0) * S;
-    const py  = ((cy + offY) % 1.0) * S;
-    const grd = ctx.createRadialGradient(px, py, 0, px, py, r * S);
-    grd.addColorStop(0,   `rgba(${cr},${cg},${cb},${ca})`);
-    grd.addColorStop(0.5, `rgba(${cr},${cg},${cb},${(ca * 0.28).toFixed(2)})`);
-    grd.addColorStop(1,   'rgba(0,0,0,0)');
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, S, S);
-  }
-
-  // Subtle central glow
-  const core = ctx.createRadialGradient(S*0.5, S*0.5, 0, S*0.5, S*0.5, S*0.2);
-  core.addColorStop(0, 'rgba(220,200,255,0.14)');
-  core.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = core;
-  ctx.fillRect(0, 0, S, S);
-
-  return cv;
+// Normalise a direction vector in-place and return it
+function _norm(d) {
+  const len = Math.sqrt(d[0]*d[0] + d[1]*d[1] + d[2]*d[2]);
+  return [d[0]/len, d[1]/len, d[2]/len];
 }
 
-function makeProceduralNebulaCube() {
-  const S = 1024;
-  // CubeTexture face order: +X, -X, +Y, -Y, +Z, -Z
-  const offsets = [
-    [0.00, 0.00],
-    [0.50, 0.20],
-    [0.20, 0.50],
-    [0.70, 0.30],
-    [0.30, 0.70],
-    [0.60, 0.60],
-  ];
-  const faces = offsets.map(([ox, oy]) => makeNebulaCubeFace(S, ox, oy));
-  const tex = new THREE.CubeTexture(faces);
-  tex.needsUpdate = true;
+function makeProceduralEquirect() {
+  const W = 2048, H = 1024;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  // Black base
+  ctx.fillStyle = '#00000e';
+  ctx.fillRect(0, 0, W, H);
+
+  // Normalise all cloud directions
+  const clouds = NEBULA_CLOUDS_3D.map(c => ({ ...c, dir: _norm(c.dir) }));
+
+  // Pixel-level equirectangular sampling in spherical coordinates.
+  // u = theta / 2PI  (azimuth, wraps seamlessly)
+  // v = phi   / PI   (elevation, 0=top 1=bottom)
+  const imgData = ctx.createImageData(W, H);
+  const px = imgData.data;
+
+  for (let y = 0; y < H; y++) {
+    const phi   = (y / H) * Math.PI;
+    const sinPhi = Math.sin(phi);
+    const cosPhi = Math.cos(phi);
+    for (let x = 0; x < W; x++) {
+      const theta = (x / W) * 2 * Math.PI;
+      // 3-D unit direction for this pixel
+      const px3 = sinPhi * Math.cos(theta);
+      const py3 = sinPhi * Math.sin(theta);
+      const pz3 = cosPhi;
+
+      let R = 0, G = 0, B = 0, A = 0;
+      for (const c of clouds) {
+        const dot = Math.max(0, px3 * c.dir[0] + py3 * c.dir[1] + pz3 * c.dir[2]);
+        const t   = 1 - dot;
+        const intensity = Math.exp(-(t / c.spread) * (t / c.spread) * 4) * c.a;
+        if (intensity < 0.002) continue;
+        R += c.r * intensity;
+        G += c.g * intensity;
+        B += c.b * intensity;
+        A += intensity;
+      }
+      const i = (y * W + x) * 4;
+      px[i]   = Math.min(255, R);
+      px[i+1] = Math.min(255, G);
+      px[i+2] = Math.min(255, B);
+      px[i+3] = Math.min(255, A * 255 * 2.5);
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
 function buildSkybox(tex) {
-  // Equirectangular JPEG loaded from assets — remap so Three.js handles projection
-  if (!tex.isCubeTexture) tex.mapping = THREE.EquirectangularReflectionMapping;
-  scene.background = tex;
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  const envTex = pmrem.fromEquirectangular(tex).texture;
+  scene.background = envTex;
+  tex.dispose();
 }
 
-// Try actual file first, then fallback to procedural cube
+// Try actual file first, then fallback to procedural equirectangular
 new THREE.TextureLoader().load(
   'assets/GSFC_20171208_nebula.jpg',
-  tex  => buildSkybox(tex),
+  tex => buildSkybox(tex),
   undefined,
-  ()   => new THREE.TextureLoader().load(
+  () => new THREE.TextureLoader().load(
     'assets/nebula.jpg',
     tex => buildSkybox(tex),
     undefined,
-    ()  => buildSkybox(makeProceduralNebulaCube()),
+    () => buildSkybox(makeProceduralEquirect()),
   ),
 );
+
+// ── Player damage tuning ──────────────────────────────────────────────────────
+const SHIP_COL_RADIUS       = 15;   // approximate ship bounding sphere (world units)
+const ASTEROID_DAMAGE       = 15;   // hp per collision tick
+const ASTEROID_HIT_COOLDOWN = 2.0;  // seconds between collision damage ticks
+const SHIELD_REGEN_DELAY    = 5.0;  // seconds after last damage before shields regen
+const SHIELD_REGEN_RATE     = 8;    // shield points per second
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 const input = new InputHandler();
@@ -428,8 +451,21 @@ window.addEventListener('wheel', e => {
   inspRadius = THREE.MathUtils.clamp(inspRadius + e.deltaY * 0.4, 60, 800);
 }, { passive: true });
 
+new MobileControls(
+  input,
+  (dx, dy) => {
+    inspTheta -= dx * 0.007;
+    inspPhi = THREE.MathUtils.clamp(inspPhi + dy * 0.007, 0.05, Math.PI - 0.05);
+  },
+  delta => {
+    // pinch apart (positive delta) = zoom in = decrease radius
+    inspRadius = THREE.MathUtils.clamp(inspRadius - delta * 0.4, 60, 800);
+  },
+);
+
 // ── Animation Loop ────────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
+let _timeSinceHit = 999; // seconds since last player damage (starts high = no regen delay)
 
 function startGame() {
   const hint = document.getElementById('hint');
@@ -447,6 +483,29 @@ function startGame() {
   hud.update();
   world.update(delta);
   elapsed += delta;
+
+  // ── Asteroid collision damage ──────────────────────────────────────────
+  _timeSinceHit += delta;
+  if (ship.hull > 0 && _timeSinceHit > ASTEROID_HIT_COOLDOWN) {
+    for (const ast of world.asteroids) {
+      const r = ast.userData.radius ?? 20;
+      if (ship.position.distanceTo(ast.position) < r + SHIP_COL_RADIUS) {
+        ship.takeDamage(ASTEROID_DAMAGE);
+        hud.flashDamage();
+        _timeSinceHit = 0;
+        break;
+      }
+    }
+  }
+
+  // Shield regen after delay
+  if (_timeSinceHit > SHIELD_REGEN_DELAY && ship.shield < 100) {
+    ship.shield = Math.min(100, ship.shield + SHIELD_REGEN_RATE * delta);
+  }
+
+  // Sync player health HUD every frame
+  hud.setPlayerHealth(ship.shield, ship.armor, ship.hull);
+  hud.setHullWarning(ship.hull < 20);
   fleet.update(delta, ship.position, elapsed);
   rockets.update(delta, fleet);
   stars.update(ship.position);
