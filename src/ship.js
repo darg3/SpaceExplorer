@@ -2,6 +2,9 @@ import * as THREE from 'three';
 
 // ── Tuning ────────────────────────────────────────────────────────────────────
 const CRUISE_SPEED        = 400;   // world units / second
+const MAX_SHIELD = 100;
+const MAX_ARMOR  = 100;
+const MAX_HULL   = 100;
 const BOOST_SPEED         = 1000;
 const PITCH_RATE          = 1.2;   // radians / second
 const YAW_RATE            = 1.2;
@@ -33,6 +36,9 @@ export class Ship {
     this.engineOn          = true;          // toggled by HUD buttons; false = no thrust, glow fades to 0
     this.targetSpeed       = CRUISE_SPEED;  // desired speed set by HUD bar (0–BOOST_SPEED)
     this.speed             = 0;             // lerped current speed (m/s), read by HUD each frame
+    this.shield            = MAX_SHIELD;
+    this.armor             = MAX_ARMOR;
+    this.hull              = MAX_HULL;
     this._emitAccum      = 0;
     this._nextParticle   = 0;
 
@@ -41,6 +47,22 @@ export class Ship {
     this._buildParticleTrail();
 
     scene.add(this.group);
+  }
+
+  // ── Health ────────────────────────────────────────────────────────────────
+
+  takeDamage(amount) {
+    if (this.shield > 0) {
+      const a = Math.min(this.shield, amount);
+      this.shield -= a;
+      amount -= a;
+    }
+    if (amount > 0 && this.armor > 0) {
+      const a = Math.min(this.armor, amount);
+      this.armor -= a;
+      amount -= a;
+    }
+    if (amount > 0) this.hull = Math.max(0, this.hull - amount);
   }
 
   // ── Hull ──────────────────────────────────────────────────────────────────
