@@ -115,6 +115,7 @@ function buildSkybox(tex) {
   scene.background = tex;
 }
 
+<<<<<<< Updated upstream
 // Try actual file first, then fallback to procedural cube
 new THREE.TextureLoader().load(
   'assets/GSFC_20171208_nebula.jpg',
@@ -123,6 +124,77 @@ new THREE.TextureLoader().load(
   ()   => new THREE.TextureLoader().load(
     'assets/nebula.jpg',
     tex => buildSkybox(tex),
+=======
+// Wrap a flat (non-equirectangular) photo onto a sphere without visible seams.
+// Two artifacts to fix:
+//   (1) Horizontal seam: photo's left edge ≠ right edge. We draw a copy of the
+//       photo shifted by W/2 (so what was at the center is now at both edges),
+//       masked with a cosine alpha that's 1 at the seam and 0 at the middle.
+//       Result: both edges of the canvas now show the photo's center pixels —
+//       identical content meeting at theta = 0/2π, no seam line.
+//   (2) Pole pinching: equirect's top and bottom rows collapse to single sphere
+//       poles. Any non-uniform color there becomes a star-shaped artifact. We
+//       fade the top and bottom into the dark base so pole pixels are uniform.
+function makeSeamlessFromImage(img) {
+  const W = 2048, H = 1024;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  // Dark base
+  ctx.fillStyle = '#00000e';
+  ctx.fillRect(0, 0, W, H);
+
+  // Original photo, stretched to the equirect aspect
+  ctx.drawImage(img, 0, 0, W, H);
+
+  // Build a shifted copy: photo's left half goes to the right half of this
+  // canvas, and vice versa. After the shift, x = 0 and x = W of `shifted`
+  // both show what was at x = W/2 of the original — i.e. identical pixels.
+  const shifted = document.createElement('canvas');
+  shifted.width = W; shifted.height = H;
+  const sctx = shifted.getContext('2d');
+  sctx.drawImage(img,    0, 0, img.width / 2, img.height,    W / 2, 0, W / 2, H);
+  sctx.drawImage(img, img.width / 2, 0, img.width / 2, img.height,  0, 0, W / 2, H);
+
+  // Cosine alpha mask: opaque at the seam (x = 0 and x = W), transparent at
+  // the middle. destination-in keeps the shifted pixels weighted by this mask.
+  sctx.globalCompositeOperation = 'destination-in';
+  const gradH = sctx.createLinearGradient(0, 0, W, 0);
+  gradH.addColorStop(0,    'rgba(255,255,255,1)');
+  gradH.addColorStop(0.5,  'rgba(255,255,255,0)');
+  gradH.addColorStop(1,    'rgba(255,255,255,1)');
+  sctx.fillStyle = gradH;
+  sctx.fillRect(0, 0, W, H);
+
+  // Composite the seam-fix overlay onto the base canvas
+  ctx.drawImage(shifted, 0, 0);
+
+  // Pole fade: top and bottom 20% blend to the dark base so pole pixels are
+  // uniform and don't pinch into a star artifact.
+  const gradV = ctx.createLinearGradient(0, 0, 0, H);
+  gradV.addColorStop(0,    'rgba(0,0,14,1)');
+  gradV.addColorStop(0.2,  'rgba(0,0,14,0)');
+  gradV.addColorStop(0.8,  'rgba(0,0,14,0)');
+  gradV.addColorStop(1,    'rgba(0,0,14,1)');
+  ctx.fillStyle = gradV;
+  ctx.fillRect(0, 0, W, H);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Try the user's nebula.jpg first, then the bundled GSFC photo, then fall back
+// to the fully procedural (already-seamless) equirect.
+new THREE.ImageLoader().load(
+  'assets/nebula.jpg',
+  img => buildSkybox(makeSeamlessFromImage(img)),
+  undefined,
+  () => new THREE.ImageLoader().load(
+    'assets/GSFC_20171208_nebula.jpg',
+    img => buildSkybox(makeSeamlessFromImage(img)),
+>>>>>>> Stashed changes
     undefined,
     ()  => buildSkybox(makeProceduralNebulaCube()),
   ),
