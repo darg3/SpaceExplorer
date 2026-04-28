@@ -2,8 +2,8 @@
 
 // Update a bar-row's fill width and percentage text.
 function _setBar(row, pct) {
-  row.querySelector('.bar-fill').style.width = pct + '%';
-  row.querySelector('.bar-pct').textContent  = Math.round(pct) + '%';
+  row.querySelector(".bar-fill").style.width = pct + "%";
+  row.querySelector(".bar-pct").textContent = Math.round(pct) + "%";
 }
 
 // ── HUD ───────────────────────────────────────────────────────────────────────
@@ -20,10 +20,10 @@ function _setBar(row, pct) {
 
 export class HUD {
   constructor(ship) {
-    this._ship        = ship;
+    this._ship = ship;
     this._thrusterBtn = null;
-    this._stopBtn     = null;
-    this._el          = null;
+    this._stopBtn = null;
+    this._el = null;
 
     this._injectStyle();
     this._injectDOM();
@@ -34,7 +34,7 @@ export class HUD {
   // Appended to <head> so index.html stays clean.
 
   _injectStyle() {
-    const style = document.createElement('style');
+    const style = document.createElement("style");
     style.textContent = `
 /* ── Root overlay ─────────────────────────────────────── */
 #hud {
@@ -51,7 +51,8 @@ export class HUD {
   position: absolute;
   bottom: 28px;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translateX(-50%) scale(0.75);
+  transform-origin: bottom center;
   pointer-events: auto;
   filter:
     drop-shadow(0 0 6px  rgba(0, 180, 255, 0.55))
@@ -61,7 +62,8 @@ export class HUD {
 /* ── Main panel ───────────────────────────────────────── */
 /* Octagonal corners via clip-path; border follows the cut */
 .hud-panel {
-  width: 460px;
+  // width: 460px;
+  width: 300px;
   background: rgba(0, 7, 22, 0.92);
   border: 1px solid rgba(0, 180, 255, 0.35);
   padding: 14px 20px 16px;
@@ -345,12 +347,14 @@ export class HUD {
     0% 100%, 0% 14px
   );
   pointer-events: auto;
+  transform: scale(0.75);
+  transform-origin: top right;
   animation: tgt-panel-in 0.25s ease forwards;
   filter: drop-shadow(0 0 8px rgba(255, 120, 0, 0.35));
 }
 @keyframes tgt-panel-in {
-  from { opacity: 0; transform: translateX(16px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from { opacity: 0; transform: translateX(16px) scale(0.75); }
+  to   { opacity: 1; transform: translateX(0)    scale(0.75); }
 }
 .tgt-header {
   padding: 7px 12px 6px;
@@ -413,12 +417,12 @@ export class HUD {
   width: 68px;
   height: 68px;
   pointer-events: none;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scale(0.75);
   animation: tgt-pulse 2s ease-in-out infinite;
 }
 @keyframes tgt-pulse {
-  0%, 100% { opacity: 1;   transform: translate(-50%, -50%) scale(1);    }
-  50%       { opacity: 0.6; transform: translate(-50%, -50%) scale(1.08); }
+  0%, 100% { opacity: 1;   transform: translate(-50%, -50%) scale(0.75); }
+  50%       { opacity: 0.6; transform: translate(-50%, -50%) scale(0.81); }
 }
 .tgt-corner {
   position: absolute;
@@ -529,7 +533,7 @@ export class HUD {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scale(0.75);
   width: 24px;
   height: 24px;
   pointer-events: none;
@@ -638,13 +642,15 @@ export class HUD {
   min-width: 240px;
   z-index: 30;
   pointer-events: auto;
+  transform: scale(0.75);
+  transform-origin: top left;
   filter: drop-shadow(0 0 10px rgba(0, 140, 255, 0.4));
   animation: ctx-in 0.12s ease forwards;
   user-select: none;
 }
 @keyframes ctx-in {
-  from { opacity: 0; transform: scale(0.94); }
-  to   { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: scale(0.7);  }
+  to   { opacity: 1; transform: scale(0.75); }
 }
 .ctx-header {
   padding: 8px 14px 7px;
@@ -705,8 +711,8 @@ export class HUD {
   // Builds the panel HTML and appends it to <body>.
 
   _injectDOM() {
-    this._el = document.createElement('div');
-    this._el.id = 'hud';
+    this._el = document.createElement("div");
+    this._el.id = "hud";
     this._el.innerHTML = `
       <!-- Target info panel — top-right, hidden until a target is locked -->
       <div class="tgt-panel" id="tgt-panel" style="display:none">
@@ -828,63 +834,63 @@ export class HUD {
     document.body.appendChild(this._el);
 
     // Damage vignette — full viewport red flash on hit
-    const vignette = document.createElement('div');
-    vignette.id = 'damage-vignette';
+    const vignette = document.createElement("div");
+    vignette.id = "damage-vignette";
     document.body.appendChild(vignette);
     this._damageVignette = vignette;
 
     // Warp flash overlay — appended separately so it sits above everything
-    const flash = document.createElement('div');
-    flash.id = 'warp-flash';
+    const flash = document.createElement("div");
+    flash.id = "warp-flash";
     flash.innerHTML = `
       <span class="warp-flash-label">&#9889; Warp Drive Engaged</span>
       <span class="warp-flash-dest" id="warp-dest-name"></span>
     `;
     document.body.appendChild(flash);
-    this._warpFlash    = flash;
-    this._warpDestName = flash.querySelector('#warp-dest-name');
+    this._warpFlash = flash;
+    this._warpDestName = flash.querySelector("#warp-dest-name");
 
-    this._thrusterBtn   = this._el.querySelector('#btn-thrusters');
-    this._stopBtn       = this._el.querySelector('#btn-stop');
-    this._fireBtn       = this._el.querySelector('#btn-fire');
-    this._mineBtnRow    = this._el.querySelector('#mine-btn-row');
-    this._mineBtn       = this._el.querySelector('#btn-mine');
-    this._warpBtnRow    = this._el.querySelector('#warp-btn-row');
-    this._warpBtn       = this._el.querySelector('#btn-warp');
-    this._speedFill     = this._el.querySelector('#spd-fill');
-    this._speedNum      = this._el.querySelector('#spd-num');
-    this._speedTrack    = this._el.querySelector('.hud-speed-track');
-    this._tgtPanel      = this._el.querySelector('#tgt-panel');
-    this._tgtName       = this._el.querySelector('#tgt-name');
-    this._tgtType       = this._el.querySelector('#tgt-type');
-    this._tgtDist       = this._el.querySelector('#tgt-dist');
-    this._tgtReticle    = this._el.querySelector('#tgt-reticle');
-    this._enemyBars     = this._el.querySelector('#tgt-enemy-bars');
-    this._tgtBarShield  = this._el.querySelector('#tgt-bar-s');
-    this._tgtBarArmor   = this._el.querySelector('#tgt-bar-a');
-    this._tgtBarHull    = this._el.querySelector('#tgt-bar-h');
-    this._plrBarShield  = this._el.querySelector('.hud-bars .bar-shield');
-    this._plrBarArmor   = this._el.querySelector('.hud-bars .bar-armor');
-    this._plrBarHull    = this._el.querySelector('.hud-bars .bar-hull');
-    this._hudGlowWrap   = this._el.querySelector('.hud-glow-wrap');
-    this._fireCooldownNum = this._el.querySelector('#fire-cooldown-num');
+    this._thrusterBtn = this._el.querySelector("#btn-thrusters");
+    this._stopBtn = this._el.querySelector("#btn-stop");
+    this._fireBtn = this._el.querySelector("#btn-fire");
+    this._mineBtnRow = this._el.querySelector("#mine-btn-row");
+    this._mineBtn = this._el.querySelector("#btn-mine");
+    this._warpBtnRow = this._el.querySelector("#warp-btn-row");
+    this._warpBtn = this._el.querySelector("#btn-warp");
+    this._speedFill = this._el.querySelector("#spd-fill");
+    this._speedNum = this._el.querySelector("#spd-num");
+    this._speedTrack = this._el.querySelector(".hud-speed-track");
+    this._tgtPanel = this._el.querySelector("#tgt-panel");
+    this._tgtName = this._el.querySelector("#tgt-name");
+    this._tgtType = this._el.querySelector("#tgt-type");
+    this._tgtDist = this._el.querySelector("#tgt-dist");
+    this._tgtReticle = this._el.querySelector("#tgt-reticle");
+    this._enemyBars = this._el.querySelector("#tgt-enemy-bars");
+    this._tgtBarShield = this._el.querySelector("#tgt-bar-s");
+    this._tgtBarArmor = this._el.querySelector("#tgt-bar-a");
+    this._tgtBarHull = this._el.querySelector("#tgt-bar-h");
+    this._plrBarShield = this._el.querySelector(".hud-bars .bar-shield");
+    this._plrBarArmor = this._el.querySelector(".hud-bars .bar-armor");
+    this._plrBarHull = this._el.querySelector(".hud-bars .bar-hull");
+    this._hudGlowWrap = this._el.querySelector(".hud-glow-wrap");
+    this._fireCooldownNum = this._el.querySelector("#fire-cooldown-num");
   }
 
   // ── Button events ─────────────────────────────────────────────────────────
 
   _bindButtons() {
-    this._onFire  = null;   // set by main.js via setFireCallback()
-    this._onMine  = null;   // set by main.js via setMineCallback()
-    this._onWarp  = null;   // set by main.js via setWarpCallback()
-    this._ctxMenu = null;   // currently open context menu DOM node
+    this._onFire = null; // set by main.js via setFireCallback()
+    this._onMine = null; // set by main.js via setMineCallback()
+    this._onWarp = null; // set by main.js via setWarpCallback()
+    this._ctxMenu = null; // currently open context menu DOM node
 
-    this._thrusterBtn.addEventListener('mousedown', e => {
-      e.stopPropagation();                          // block orbit-camera drag
+    this._thrusterBtn.addEventListener("mousedown", (e) => {
+      e.stopPropagation(); // block orbit-camera drag
       this._ship.setEngine(!this._ship.engineOn);
       this._syncThrusterButton();
     });
 
-    this._stopBtn.addEventListener('mousedown', e => {
+    this._stopBtn.addEventListener("mousedown", (e) => {
       e.stopPropagation();
       this._ship.stopShip();
       this._syncThrusterButton();
@@ -896,9 +902,12 @@ export class HUD {
     // track without dropping the interaction.
     let dragging = false;
 
-    const applySpeed = e => {
+    const applySpeed = (e) => {
       const rect = this._speedTrack.getBoundingClientRect();
-      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const frac = Math.max(
+        0,
+        Math.min(1, (e.clientX - rect.left) / rect.width),
+      );
       this._ship.setTargetSpeed(Math.round(frac * 1000));
       // Auto-enable engine when user explicitly sets a speed
       if (!this._ship.engineOn) {
@@ -907,29 +916,31 @@ export class HUD {
       }
     };
 
-    this._speedTrack.addEventListener('mousedown', e => {
+    this._speedTrack.addEventListener("mousedown", (e) => {
       e.stopPropagation();
       dragging = true;
       applySpeed(e);
     });
 
-    document.addEventListener('mousemove', e => {
+    document.addEventListener("mousemove", (e) => {
       if (dragging) applySpeed(e);
     });
 
-    document.addEventListener('mouseup', () => { dragging = false; });
+    document.addEventListener("mouseup", () => {
+      dragging = false;
+    });
 
-    this._fireBtn.addEventListener('mousedown', e => {
+    this._fireBtn.addEventListener("mousedown", (e) => {
       e.stopPropagation();
       if (this._onFire) this._onFire();
     });
 
-    this._mineBtn.addEventListener('mousedown', e => {
+    this._mineBtn.addEventListener("mousedown", (e) => {
       e.stopPropagation();
       if (this._onMine) this._onMine();
     });
 
-    this._warpBtn.addEventListener('mousedown', e => {
+    this._warpBtn.addEventListener("mousedown", (e) => {
       e.stopPropagation();
       if (this._onWarp) this._onWarp();
     });
@@ -942,21 +953,21 @@ export class HUD {
   setTarget(label, type, isEnemy = false) {
     this._tgtName.textContent = label;
     this._tgtType.textContent = type;
-    this._tgtDist.textContent = '---';
-    this._enemyBars.style.display = isEnemy ? '' : 'none';
+    this._tgtDist.textContent = "---";
+    this._enemyBars.style.display = isEnemy ? "" : "none";
     // Reset entry animation by forcing reflow
-    this._tgtPanel.style.animation = 'none';
-    this._tgtPanel.offsetWidth;      // reflow
-    this._tgtPanel.style.animation  = '';
-    this._tgtPanel.style.display    = '';
-    this._tgtReticle.style.display  = '';
+    this._tgtPanel.style.animation = "none";
+    this._tgtPanel.offsetWidth; // reflow
+    this._tgtPanel.style.animation = "";
+    this._tgtPanel.style.display = "";
+    this._tgtReticle.style.display = "";
   }
 
   // Hide target panel and reticle.
   clearTarget() {
-    this._tgtPanel.style.display   = 'none';
-    this._tgtReticle.style.display = 'none';
-    this._enemyBars.style.display  = 'none';
+    this._tgtPanel.style.display = "none";
+    this._tgtReticle.style.display = "none";
+    this._enemyBars.style.display = "none";
   }
 
   // Called every frame while a target is locked.
@@ -966,52 +977,54 @@ export class HUD {
   updateTarget(distUnits, screenX, screenY, onScreen) {
     // Format distance: <1 000 → km  |  <1 000 000 → Mm  |  else → Gm
     let distStr;
-    if      (distUnits < 1000) distStr = `${Math.round(distUnits)} km`;
-    else if (distUnits < 1e6)  distStr = `${(distUnits / 1000).toFixed(1)} Mm`;
-    else                       distStr = `${(distUnits / 1e6).toFixed(2)} Gm`;
+    if (distUnits < 1000) distStr = `${Math.round(distUnits)} km`;
+    else if (distUnits < 1e6) distStr = `${(distUnits / 1000).toFixed(1)} Mm`;
+    else distStr = `${(distUnits / 1e6).toFixed(2)} Gm`;
     this._tgtDist.textContent = distStr;
 
     // Move reticle to the target's screen position when it's in front of the camera
     if (onScreen) {
-      this._tgtReticle.style.display = '';
-      this._tgtReticle.style.left    = `${screenX}px`;
-      this._tgtReticle.style.top     = `${screenY}px`;
+      this._tgtReticle.style.display = "";
+      this._tgtReticle.style.left = `${screenX}px`;
+      this._tgtReticle.style.top = `${screenY}px`;
     } else {
-      this._tgtReticle.style.display = 'none';
+      this._tgtReticle.style.display = "none";
     }
   }
 
   // Called every frame from main.js to refresh the speed readout.
   update() {
-    const s          = this._ship.speed;
-    const pct        = Math.min(s / 1000, 1) * 100;
-    const isBoosting = s > 405;   // threshold avoids flicker right at cruise max
+    const s = this._ship.speed;
+    const pct = Math.min(s / 1000, 1) * 100;
+    const isBoosting = s > 405; // threshold avoids flicker right at cruise max
 
-    this._speedFill.style.width = pct.toFixed(1) + '%';
-    this._speedFill.classList.toggle('boost', isBoosting);
-    this._speedNum.innerHTML = Math.round(s) + ' <small>m/s</small>';
-    this._speedNum.classList.toggle('boost', isBoosting);
+    this._speedFill.style.width = pct.toFixed(1) + "%";
+    this._speedFill.classList.toggle("boost", isBoosting);
+    this._speedNum.innerHTML = Math.round(s) + " <small>m/s</small>";
+    this._speedNum.classList.toggle("boost", isBoosting);
   }
 
   // ── Combat API ────────────────────────────────────────────────────────────
 
   // Register the callback invoked when the FIRE button is pressed.
-  setFireCallback(fn) { this._onFire = fn; }
+  setFireCallback(fn) {
+    this._onFire = fn;
+  }
 
   // Grey out the FIRE button for `ms` milliseconds and show a countdown.
   triggerFireCooldown(ms = 600) {
-    this._fireBtn.classList.add('cooldown');
+    this._fireBtn.classList.add("cooldown");
     const num = this._fireCooldownNum;
     const end = performance.now() + ms;
-    num.style.display = '';
+    num.style.display = "";
     const tick = () => {
       const remaining = end - performance.now();
       if (remaining <= 0) {
-        this._fireBtn.classList.remove('cooldown');
-        num.style.display = 'none';
+        this._fireBtn.classList.remove("cooldown");
+        num.style.display = "none";
         return;
       }
-      num.textContent = ' ' + (remaining / 1000).toFixed(1) + 's';
+      num.textContent = " " + (remaining / 1000).toFixed(1) + "s";
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -1020,45 +1033,47 @@ export class HUD {
   // Update the enemy health bars in the target panel (called every frame).
   updateTargetHealth(shield, armor, hull) {
     _setBar(this._tgtBarShield, shield);
-    _setBar(this._tgtBarArmor,  armor);
-    _setBar(this._tgtBarHull,   hull);
+    _setBar(this._tgtBarArmor, armor);
+    _setBar(this._tgtBarHull, hull);
   }
 
   // Update the player's own health bars.
   setPlayerHealth(shield, armor, hull) {
     _setBar(this._plrBarShield, shield);
-    _setBar(this._plrBarArmor,  armor);
-    _setBar(this._plrBarHull,   hull);
+    _setBar(this._plrBarArmor, armor);
+    _setBar(this._plrBarHull, hull);
   }
 
   // Flash the red damage vignette on hit.
   flashDamage() {
     const v = this._damageVignette;
-    v.classList.remove('flashing');
+    v.classList.remove("flashing");
     void v.offsetWidth; // force reflow so animation restarts
-    v.classList.add('flashing');
+    v.classList.add("flashing");
   }
 
   // Toggle pulsing red warning when hull is critical.
   setHullWarning(critical) {
-    this._hudGlowWrap.classList.toggle('hull-critical', critical);
+    this._hudGlowWrap.classList.toggle("hull-critical", critical);
   }
 
   // ── Mining API ────────────────────────────────────────────────────────────
 
-  setMineCallback(fn) { this._onMine = fn; }
+  setMineCallback(fn) {
+    this._onMine = fn;
+  }
 
   // Show or hide the Mine Asteroid button.
   // alreadyMined: true = show in "depleted" state (greyed, no pointer events).
   showMineButton(show, alreadyMined = false) {
-    this._mineBtnRow.style.display = show ? '' : 'none';
+    this._mineBtnRow.style.display = show ? "" : "none";
     if (show) {
-      this._mineBtn.classList.toggle('depleted', alreadyMined);
+      this._mineBtn.classList.toggle("depleted", alreadyMined);
       if (alreadyMined) {
-        this._mineBtn.innerHTML  = '&#9671; Depleted';
-        this._mineBtn.style.pointerEvents = 'none';
+        this._mineBtn.innerHTML = "&#9671; Depleted";
+        this._mineBtn.style.pointerEvents = "none";
       } else {
-        this._mineBtn.style.pointerEvents = '';
+        this._mineBtn.style.pointerEvents = "";
       }
     }
   }
@@ -1066,26 +1081,28 @@ export class HUD {
   // Update the mine button to reflect progress (0–1), or null to reset.
   setMiningProgress(pct) {
     if (pct === null) {
-      this._mineBtn.innerHTML = '&#9671; Mine Asteroid';
-      this._mineBtn.classList.remove('mining', 'done');
+      this._mineBtn.innerHTML = "&#9671; Mine Asteroid";
+      this._mineBtn.classList.remove("mining", "done");
     } else if (pct >= 1) {
-      this._mineBtn.innerHTML = '&#10003; Resource Acquired';
-      this._mineBtn.classList.remove('mining');
-      this._mineBtn.classList.add('done');
+      this._mineBtn.innerHTML = "&#10003; Resource Acquired";
+      this._mineBtn.classList.remove("mining");
+      this._mineBtn.classList.add("done");
     } else {
       this._mineBtn.innerHTML = `&#9671; Mining... ${Math.round(pct * 100)}%`;
-      this._mineBtn.classList.add('mining');
-      this._mineBtn.classList.remove('done');
+      this._mineBtn.classList.add("mining");
+      this._mineBtn.classList.remove("done");
     }
   }
 
   // ── Warp API ──────────────────────────────────────────────────────────────
 
-  setWarpCallback(fn) { this._onWarp = fn; }
+  setWarpCallback(fn) {
+    this._onWarp = fn;
+  }
 
   // Show or hide the Warp button; label is the target's name.
-  showWarpButton(show, label = 'Target') {
-    this._warpBtnRow.style.display = show ? '' : 'none';
+  showWarpButton(show, label = "Target") {
+    this._warpBtnRow.style.display = show ? "" : "none";
     if (show) this._warpBtn.innerHTML = `&#9889; Warp To ${label}`;
   }
 
@@ -1094,20 +1111,20 @@ export class HUD {
   triggerWarpFlash(destLabel, onPeak) {
     const el = this._warpFlash;
     this._warpDestName.textContent = destLabel;
-    el.classList.remove('fade-out', 'active');
+    el.classList.remove("fade-out", "active");
 
     // Force reflow so the transition fires cleanly
-    el.offsetWidth;                           // eslint-disable-line no-unused-expressions
+    el.offsetWidth; // eslint-disable-line no-unused-expressions
 
-    el.style.opacity = '1';
-    el.classList.add('active');
+    el.style.opacity = "1";
+    el.classList.add("active");
 
     setTimeout(() => {
       onPeak();
-      el.classList.add('fade-out');
-      el.classList.remove('active');
-      el.style.opacity = '0';
-      setTimeout(() => el.classList.remove('fade-out'), 800);
+      el.classList.add("fade-out");
+      el.classList.remove("active");
+      el.style.opacity = "0";
+      setTimeout(() => el.classList.remove("fade-out"), 800);
     }, 240);
   }
 
@@ -1118,8 +1135,8 @@ export class HUD {
   showContextMenu(items, x, y) {
     this.hideContextMenu();
 
-    const menu = document.createElement('div');
-    menu.id = 'ctx-menu';
+    const menu = document.createElement("div");
+    menu.id = "ctx-menu";
 
     // Group by category, preserving insertion order
     const cats = {};
@@ -1133,10 +1150,13 @@ export class HUD {
       html += `<div class="ctx-section">${cat}</div>`;
       for (let i = 0; i < list.length; i++) {
         const it = list[i];
-        const d  = it.dist;
-        const ds = d < 1000 ? `${Math.round(d)} km`
-                 : d < 1e6  ? `${(d / 1000).toFixed(1)} Mm`
-                 :             `${(d / 1e6).toFixed(2)} Gm`;
+        const d = it.dist;
+        const ds =
+          d < 1000
+            ? `${Math.round(d)} km`
+            : d < 1e6
+              ? `${(d / 1000).toFixed(1)} Mm`
+              : `${(d / 1e6).toFixed(2)} Gm`;
         html += `
           <div class="ctx-item" data-cat="${cat}" data-idx="${i}">
             <span class="ctx-item-label">${it.label}</span>
@@ -1149,15 +1169,16 @@ export class HUD {
     menu.innerHTML = html;
 
     // Position, clamped so the menu doesn't overflow the right/bottom edge
-    const W = window.innerWidth, H = window.innerHeight;
+    const W = window.innerWidth,
+      H = window.innerHeight;
     menu.style.left = `${Math.min(x, W - 260)}px`;
-    menu.style.top  = `${Math.min(y, H - 40)}px`;  // rough estimate; adjusts after render
+    menu.style.top = `${Math.min(y, H - 40)}px`; // rough estimate; adjusts after render
 
     // Wire item clicks
-    menu.querySelectorAll('.ctx-item').forEach(el => {
+    menu.querySelectorAll(".ctx-item").forEach((el) => {
       const cat = el.dataset.cat;
       const idx = parseInt(el.dataset.idx);
-      el.addEventListener('mousedown', e => {
+      el.addEventListener("mousedown", (e) => {
         e.stopPropagation();
         cats[cat][idx].onSelect();
         this.hideContextMenu();
@@ -1178,17 +1199,20 @@ export class HUD {
   }
 
   hideContextMenu() {
-    if (this._ctxMenu) { this._ctxMenu.remove(); this._ctxMenu = null; }
+    if (this._ctxMenu) {
+      this._ctxMenu.remove();
+      this._ctxMenu = null;
+    }
   }
 
   // Keep THRUSTERS button label/style in sync with ship.engineOn.
   _syncThrusterButton() {
     if (this._ship.engineOn) {
-      this._thrusterBtn.innerHTML = '&#9889; Thrusters';
-      this._thrusterBtn.classList.remove('off');
+      this._thrusterBtn.innerHTML = "&#9889; Thrusters";
+      this._thrusterBtn.classList.remove("off");
     } else {
-      this._thrusterBtn.innerHTML = '&#9889; Thrusters: Off';
-      this._thrusterBtn.classList.add('off');
+      this._thrusterBtn.innerHTML = "&#9889; Thrusters: Off";
+      this._thrusterBtn.classList.add("off");
     }
   }
 
