@@ -2,6 +2,9 @@ import * as THREE from 'three';
 
 // ── Tuning ────────────────────────────────────────────────────────────────────
 const CRUISE_SPEED        = 400;   // world units / second
+const MAX_SHIELD = 100;
+const MAX_ARMOR  = 100;
+const MAX_HULL   = 100;
 const BOOST_SPEED         = 1000;
 const PITCH_RATE          = 1.2;   // radians / second
 const YAW_RATE            = 1.2;
@@ -33,6 +36,9 @@ export class Ship {
     this.engineOn          = true;          // toggled by HUD buttons; false = no thrust, glow fades to 0
     this.targetSpeed       = CRUISE_SPEED;  // desired speed set by HUD bar (0–BOOST_SPEED)
     this.speed             = 0;             // lerped current speed (m/s), read by HUD each frame
+    this.shield            = MAX_SHIELD;
+    this.armor             = MAX_ARMOR;
+    this.hull              = MAX_HULL;
     this._emitAccum      = 0;
     this._nextParticle   = 0;
 
@@ -41,6 +47,22 @@ export class Ship {
     this._buildParticleTrail();
 
     scene.add(this.group);
+  }
+
+  // ── Health ────────────────────────────────────────────────────────────────
+
+  takeDamage(amount) {
+    if (this.shield > 0) {
+      const a = Math.min(this.shield, amount);
+      this.shield -= a;
+      amount -= a;
+    }
+    if (amount > 0 && this.armor > 0) {
+      const a = Math.min(this.armor, amount);
+      this.armor -= a;
+      amount -= a;
+    }
+    if (amount > 0) this.hull = Math.max(0, this.hull - amount);
   }
 
   // ── Hull ──────────────────────────────────────────────────────────────────
@@ -112,6 +134,22 @@ export class Ship {
       const strip = new THREE.Mesh(new THREE.BoxGeometry(70, 1.5, 1.5), accent);
       strip.position.set(0, zOff * 25, zOff > 0 ? 6 : -6);
       this.group.add(strip);
+    });
+
+    // Rocket turret pods — two symmetric barrels along +X near the nose
+    this._turretPositions = [];
+    [1, -1].forEach(side => {
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(3, 3.5, 8, 8), accent);
+      base.rotation.z = -Math.PI / 2;
+      base.position.set(28, 0, side * 10);
+      this.group.add(base);
+
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 18, 8), dark);
+      barrel.rotation.z = -Math.PI / 2;
+      barrel.position.set(40, 0, side * 10);
+      this.group.add(barrel);
+
+      this._turretPositions.push(new THREE.Vector3(50, 0, side * 10));
     });
   }
 
@@ -212,6 +250,12 @@ export class Ship {
   setEngine(on)        { this.engineOn = on; }
   stopShip()           { this.engineOn = false; }
   setTargetSpeed(s)    { this.targetSpeed = THREE.MathUtils.clamp(s, 0, BOOST_SPEED); }
+
+  // Returns world-space positions of both turret barrels (used by RocketManager)
+  getTurretPositions() {
+    this.group.updateMatrixWorld(true);
+    return this._turretPositions.map(p => p.clone().applyMatrix4(this.group.matrixWorld));
+  }
 
   // ── Update (call every frame) ─────────────────────────────────────────────
 

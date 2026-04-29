@@ -728,6 +728,257 @@ export class HUD {
   margin-left: 10px;
   white-space: nowrap;
 }
+
+/* ── FIRE button ──────────────────────────────────────── */
+.fire-btn {
+  color: #ff6622 !important;
+  text-shadow: 0 0 10px rgba(255, 100, 30, 0.8) !important;
+}
+.fire-btn:hover {
+  background: rgba(80, 20, 0, 0.98) !important;
+}
+.fire-btn:hover::before {
+  border-color: rgba(255, 100, 30, 0.7) !important;
+}
+.fire-btn.cooldown {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ── WARP button ──────────────────────────────────────── */
+.warp-btn {
+  color: #cc88ff !important;
+  text-shadow: 0 0 10px rgba(180, 100, 255, 0.8) !important;
+}
+.warp-btn:hover {
+  background: rgba(30, 0, 55, 0.98) !important;
+}
+.warp-btn:hover::before {
+  border-color: rgba(180, 100, 255, 0.7) !important;
+}
+.warp-btn.cooldown {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ── MINE button ──────────────────────────────────────── */
+.mine-btn {
+  color: #33ff99 !important;
+  text-shadow: 0 0 10px rgba(50, 255, 150, 0.8) !important;
+}
+.mine-btn:hover {
+  background: rgba(0, 40, 20, 0.98) !important;
+}
+.mine-btn:hover::before {
+  border-color: rgba(50, 255, 150, 0.7) !important;
+}
+.mine-btn.mining {
+  color: #ffcc00 !important;
+  text-shadow: 0 0 10px rgba(255, 200, 0, 0.8) !important;
+  pointer-events: none;
+}
+.mine-btn.done {
+  color: #aaffcc !important;
+  text-shadow: none !important;
+  pointer-events: none;
+}
+.mine-btn.depleted {
+  color: rgba(80, 110, 90, 0.5) !important;
+  text-shadow: none !important;
+}
+
+/* ── Damage vignette ──────────────────────────────────── */
+#damage-vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 200;
+  box-shadow: inset 0 0 120px rgba(255, 0, 0, 0.85);
+  opacity: 0;
+}
+@keyframes dmg-flash {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+#damage-vignette.flashing {
+  animation: dmg-flash 0.9s ease-out forwards;
+}
+
+/* ── Crosshair ────────────────────────────────────────── */
+#crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.75);
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.75;
+}
+#crosshair::before,
+#crosshair::after {
+  content: '';
+  position: absolute;
+  background: #00e5ff;
+  box-shadow: 0 0 4px rgba(0, 229, 255, 0.7);
+}
+#crosshair::before {
+  width: 2px;
+  height: 100%;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+#crosshair::after {
+  height: 2px;
+  width: 100%;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+/* ── Hull critical warning ────────────────────────────── */
+@keyframes hull-warn {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(255,  0,  0, 0.0)) drop-shadow(0 0 22px rgba(0, 90, 220, 0.30)); }
+  50%       { filter: drop-shadow(0 0 18px rgba(255, 50, 50, 0.9)) drop-shadow(0 0 22px rgba(0, 90, 220, 0.30)); }
+}
+.hud-glow-wrap.hull-critical {
+  animation: hull-warn 0.8s ease-in-out infinite !important;
+}
+
+/* ── Fire cooldown countdown ──────────────────────────── */
+#fire-cooldown-num {
+  font-size: 10px;
+  margin-left: 6px;
+  opacity: 0.9;
+  color: #ff9955;
+}
+
+/* ── Warp flash overlay ───────────────────────────────── */
+#warp-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: radial-gradient(ellipse 80% 55% at center,
+    rgba(255, 255, 255, 1.0)    0%,
+    rgba(160, 210, 255, 0.96)  28%,
+    rgba(70,  130, 255, 0.80)  58%,
+    rgba(0,   30,  120, 0.0)  100%
+  );
+  transition: opacity 0.22s ease-in;
+}
+#warp-flash.fade-out {
+  transition: opacity 0.75s ease-out;
+}
+.warp-flash-label {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: 0.38em;
+  color: rgba(0, 40, 130, 0.85);
+  text-transform: uppercase;
+  opacity: 0;
+  transform: scaleX(2.5);
+  transition: opacity 0.12s ease-in, transform 0.22s ease-in;
+}
+.warp-flash-dest {
+  font-family: 'Courier New', monospace;
+  font-size: 20px;
+  letter-spacing: 0.2em;
+  color: rgba(0, 20, 100, 0.9);
+  text-transform: uppercase;
+  text-shadow: 0 0 24px rgba(100, 180, 255, 0.9);
+  opacity: 0;
+  transform: scaleX(2.5);
+  transition: opacity 0.12s ease-in, transform 0.22s ease-in;
+}
+#warp-flash.active .warp-flash-label,
+#warp-flash.active .warp-flash-dest {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+/* ── Context menu ─────────────────────────────────────── */
+#ctx-menu {
+  position: fixed;
+  background: rgba(0, 7, 22, 0.97);
+  border: 1px solid rgba(0, 180, 255, 0.4);
+  clip-path: polygon(
+    0% 0%, calc(100% - 16px) 0%,
+    100% 16px, 100% 100%,
+    16px 100%, 0% calc(100% - 16px)
+  );
+  min-width: 240px;
+  z-index: 30;
+  pointer-events: auto;
+  transform: scale(0.75);
+  transform-origin: top left;
+  filter: drop-shadow(0 0 10px rgba(0, 140, 255, 0.4));
+  animation: ctx-in 0.12s ease forwards;
+  user-select: none;
+}
+@keyframes ctx-in {
+  from { opacity: 0; transform: scale(0.7);  }
+  to   { opacity: 1; transform: scale(0.75); }
+}
+.ctx-header {
+  padding: 8px 14px 7px;
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  color: rgba(0, 210, 255, 0.85);
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0, 200, 255, 0.5);
+  border-bottom: 1px solid rgba(0, 180, 255, 0.2);
+  background: rgba(0, 30, 60, 0.4);
+}
+.ctx-section {
+  padding: 5px 14px 3px;
+  font-size: 8px;
+  letter-spacing: 0.22em;
+  color: rgba(255, 140, 0, 0.7);
+  text-transform: uppercase;
+  border-top: 1px solid rgba(255, 140, 0, 0.12);
+  margin-top: 2px;
+}
+.ctx-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 14px 6px 20px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.ctx-item:hover {
+  background: rgba(0, 100, 200, 0.25);
+}
+.ctx-item-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #00e5ff;
+  text-shadow: 0 0 6px rgba(0, 229, 255, 0.4);
+}
+.ctx-item-sub {
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  color: rgba(140, 200, 255, 0.45);
+  text-transform: uppercase;
+  margin-left: 8px;
+  flex: 1;
+}
+.ctx-item-dist {
+  font-size: 10px;
+  color: rgba(0, 200, 200, 0.65);
+  letter-spacing: 0.04em;
+  margin-left: 10px;
+  white-space: nowrap;
+}
     `;
     document.head.appendChild(style);
   }
