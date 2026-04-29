@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>HUD Redesign — 5 Alternatives</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px;
+    background: radial-gradient(ellipse at center, #06121f 0%, #02060d 100%);
+    font-family: 'Courier New', monospace;
+    color: #cfeaff;
+    min-height: 100vh;
+  }
+  h1 {
+    text-align: center;
+    font-size: 22px;
+    letter-spacing: 0.4em;
+    color: #00e5ff;
+    text-shadow: 0 0 12px rgba(0, 229, 255, 0.6);
+    text-transform: uppercase;
+    margin: 0 0 6px;
+  }
+  .sub {
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: rgba(140, 200, 255, 0.55);
+    text-transform: uppercase;
+    margin-bottom: 36px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 26px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .card {
+    background: rgba(0, 8, 22, 0.85);
+    border: 1px solid rgba(0, 180, 255, 0.25);
+    padding: 18px 18px 20px;
+    position: relative;
+    clip-path: polygon(
+      14px 0%, calc(100% - 14px) 0%,
+      100% 14px, 100% calc(100% - 14px),
+      calc(100% - 14px) 100%, 14px 100%,
+      0% calc(100% - 14px), 0% 14px
+    );
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .card:hover {
+    border-color: rgba(0, 229, 255, 0.65);
+    transform: translateY(-3px);
+  }
+  .card-num {
+    position: absolute;
+    top: 10px;
+    right: 16px;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: rgba(0, 200, 255, 0.4);
+  }
+  .card-title {
+    font-size: 14px;
+    letter-spacing: 0.22em;
+    color: #00e5ff;
+    text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .card-blurb {
+    font-size: 11px;
+    line-height: 1.55;
+    color: rgba(180, 215, 240, 0.7);
+    margin-bottom: 18px;
+    min-height: 50px;
+  }
+  .card-stage {
+    height: 240px;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(70, 30, 120, 0.35), transparent 60%),
+      radial-gradient(ellipse at 80% 80%, rgba(0, 70, 160, 0.4), transparent 60%),
+      #02050c;
+    border: 1px solid rgba(0, 100, 180, 0.18);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  /* tiny stars for the stage backdrop */
+  .stage-stars::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(1px 1px at 20% 30%, #fff, transparent),
+      radial-gradient(1px 1px at 60% 50%, #cce, transparent),
+      radial-gradient(1px 1px at 80% 20%, #fff, transparent),
+      radial-gradient(1px 1px at 35% 75%, #fff, transparent),
+      radial-gradient(1px 1px at 90% 65%, #aac, transparent),
+      radial-gradient(1px 1px at 10% 60%, #fff, transparent),
+      radial-gradient(1px 1px at 50% 15%, #ddf, transparent);
+    opacity: 0.7;
+  }
+
+  /* ────────────────────────────────────────────────────────────────────── */
+  /* 1. HOLOGRAPHIC ORB                                                    */
+  /* ────────────────────────────────────────────────────────────────────── */
+  .orb-wrap {
+    position: absolute;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 180px;
+    height: 180px;
+  }
+  .orb-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid transparent;
+  }
+  .orb-ring.r1 {
+    inset: 0;
+    border-top-color: #00e5ff;
+    border-right-color: #00e5ff;
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.5);
+    animation: orb-spin1 6s linear infinite;
+  }
+  .orb-ring.r2 {
+    inset: 18px;
+    border-top-color: #ffb300;
+    border-left-color: #ffb300;
+    box-shadow: 0 0 10px rgba(255, 179, 0, 0.5);
+    animation: orb-spin2 4s linear infinite reverse;
+  }
+  .orb-ring.r3 {
+    inset: 36px;
+    border-bottom-color: #69f0ae;
+    border-right-color: #69f0ae;
+    box-shadow: 0 0 8px rgba(105, 240, 174, 0.5);
+    animation: orb-spin1 3s linear infinite;
+  }
+  @keyframes orb-spin1 { to { transform: rotate(360deg); } }
+  @keyframes orb-spin2 { to { transform: rotate(-360deg); } }
+  .orb-core {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #b6f5ff 0%, #00e5ff 40%, #003a66 100%);
+    box-shadow: 0 0 30px rgba(0, 229, 255, 0.9), inset 0 0 20px rgba(255,255,255,0.3);
+    animation: orb-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes orb-pulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50%       { transform: translate(-50%, -50%) scale(1.12); }
+  }
+  .orb-label {
+    position: absolute;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-shadow: 0 0 6px currentColor;
+  }
+  .orb-label.l1 { top: -8px;  left: 50%; transform: translateX(-50%); color: #00e5ff; }
+  .orb-label.l2 { top: 14px;  right: -8px; color: #ffb300; }
+  .orb-label.l3 { bottom: 4px; left: -2px; color: #69f0ae; }
+  .orb-buttons {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+  .orb-btn {
+    position: absolute;
+    width: 32px; height: 28px;
+    background: rgba(0, 25, 55, 0.95);
+    border: 1px solid rgba(0, 180, 255, 0.5);
+    clip-path: polygon(8px 0%, calc(100% - 8px) 0%, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0% 50%);
+    color: #00cfff;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-shadow: 0 0 6px currentColor;
+  }
+  .orb-btn.b1 { top: -2px;  left: -10px; }
+  .orb-btn.b2 { top: -2px;  right: -10px; }
+  .orb-btn.b3 { bottom: -2px; left: -10px; color: #ff6622; }
+  .orb-btn.b4 { bottom: -2px; right: -10px; color: #cc88ff; }
+
+  /* ────────────────────────────────────────────────────────────────────── */
+  /* 2. JET FIGHTER VERTICAL TAPES                                         */
+  /* ────────────────────────────────────────────────────────────────────── */
+  .tapes {
+    position: absolute;
+    inset: 16px;
+  }
+  .tape-group {
+    position: absolute;
+    top: 0;
+    display: flex;
+    gap: 10px;
+  }
+  .tape-group.left { left: 0; }
+  .tape-group.right { right: 0; }
+  .tape-col { display: flex; flex-direction: column; align-items: center; }
+  .tape-cap {
+    font-size: 8px;
+    letter-spacing: 0.2em;
+    color: rgba(140, 200, 255, 0.6);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .tape {
+    width: 18px;
+    height: 130px;
+    background: rgba(0, 180, 255, 0.06);
+    border: 1px solid rgba(0, 160, 255, 0.25);
+    position: relative;
+    overflow: hidden;
+  }
+  .tape-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0; right: 0;
+    background-image: repeating-linear-gradient(
+      0deg, currentColor 0, currentColor 4px, transparent 4px, transparent 6px
+    );
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+  .tape.shd .tape-fill { color: #00e5ff; height: 87%; }
+  .tape.arm .tape-fill { color: #ffb300; height: 78%; }
+  .tape.hul .tape-fill { color: #69f0ae; height: 93%; }
+  .tape.spd .tape-fill { color: #00e5ff; height: 34%; }
+  .tape-num {
+    font-size: 9px;
+    margin-top: 4px;
+    color: currentColor;
+    text-shadow: 0 0 4px currentColor;
+  }
+  .tape.shd ~ .tape-num,  .tape.shd .tape-num { color: #00e5ff; }
+  .tape.arm + .tape-num   { color: #ffb300; }
+  .tape.hul + .tape-num   { color: #69f0ae; }
+  .tape.spd + .tape-num   { color: #00e5ff; }
+  .tape-buttons {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 6px;
+  }
+  .tape-btn {
+    padding: 4px 10px;
+    background: rgba(0, 25, 55, 0.95);
+    border: 1px solid rgba(0, 180, 255, 0.5);
+    clip-path: polygon(6px 0%, calc(100% - 6px) 0%, 100% 50%, calc(100% - 6px) 100%, 6px 100%, 0% 50%);
+    color: #00cfff;
+    font-size: 8px;
+    letter-spacing: 0.2em;
+    text-shadow: 0 0 6px currentColor;
+  }
+  .tape-btn.fire { color: #ff6622; }
+  .tape-btn.warp { color: #cc88ff; }
+
+  /* ────────────────────────────────────────────────────────────────────── */
+  /* 3. RADIAL PIE FAN                                                     */
+  /* ────────────────────────────────────────────────────────────────────── */
+  .fan-wrap {
+    position: absolute;
+    bottom: -90px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 280px;
+    height: 280px;
+  }
+  .fan-bg {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(
+      from 180deg,
+      rgba(0, 229, 255, 0.7) 0deg,
+      rgba(0, 229, 255, 0.4) 60deg,
+      rgba(255, 179, 0, 0.7) 60deg,
+      rgba(255, 179, 0, 0.4) 120deg,
+      rgba(105, 240, 174, 0.7) 120deg,
+      rgba(105, 240, 174, 0.4) 180deg,
+      transparent 180deg
+    );
+    -webkit-mask: radial-gradient(circle, transparent 60px, #000 62px, #000 130px, transparent 132px);
+            mask: radial-gradient(circle, transparent 60px, #000 62px, #000 130px, transparent 132px);
+    filter: drop-shadow(0 0 12px rgba(0, 200, 255, 0.5));
+  }
+  .fan-label {
+    position: absolute;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-shadow: 0 0 6px currentColor;
+  }
+  .fan-label.shd { left: 24px;  top: 100px; color: #00e5ff; }
+  .fan-label.arm { left: 50%;   top: 56px; transform: translateX(-50%); color: #ffb300; }
+  .fan-label.hul { right: 24px; top: 100px; color: #69f0ae; }
+  .fan-needle {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    height: 110px;
+    background: linear-gradient(to top, #ff8c00, transparent);
+    transform-origin: bottom;
+    transform: translateX(-50%) rotate(-30deg);
+    box-shadow: 0 0 8px #ff8c00;
+  }
+  .fan-speed {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 14px;
+    color: #ff8c00;
+    text-shadow: 0 0 8px #ff8c00;
+    letter-spacing: 0.1em;
+  }
+  .fan-buttons {
+    position: absolute;
+    bottom: -2px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+  }
+  .fan-btn {
+    width: 28px; height: 26px;
+    background: rgba(0, 25, 55, 0.95);
+    border: 1px solid rgba(0, 180, 255, 0.5);
+    border-radius: 50%;
+    color: #00cfff;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-shadow: 0 0 6px currentColor;
+  }
+  .fan-btn.fire { color: #ff6622; }
+  .fan-btn.warp { color: #cc88ff; }
+  .fan-btn.mine { color: #33ff99; }
+
+  /* ────────────────────────────────────────────────────────────────────── */
+  /* 4. DIEGETIC SHIP SCHEMATIC                                            */
+  /* ────────────────────────────────────────────────────────────────────── */
+  .schem {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    right: 14px;
+    height: 195px;
+    background: rgba(0, 8, 22, 0.92);
+    border: 1px solid rgba(0, 180, 255, 0.35);
+    clip-path: polygon(14px 0%, 100% 0%, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0% 100%, 0% 14px);
+    padding: 10px 12px;
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 12px;
+  }
+  .ship-art {
+    position: relative;
+    background: rgba(0, 30, 60, 0.3);
+    border-radius: 4px;
+  }
+  .ship-halo {
+    position: absolute;
+    inset: 12px;
+    border-radius: 50%;
+    border: 1.5px solid #00e5ff;
+    box-shadow: 0 0 16px rgba(0, 229, 255, 0.6), inset 0 0 16px rgba(0, 229, 255, 0.4);
+    animation: halo-pulse 2s ease-in-out infinite;
+  }
+  @keyframes halo-pulse {
+    0%, 100% { opacity: 0.7; }
+    50%       { opacity: 1; }
+  }
+  .ship-body {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 70px; height: 30px;
+    background: linear-gradient(90deg, #ffb300 0%, #ffb300 70%, rgba(255, 179, 0, 0.4) 100%);
+    clip-path: polygon(0% 50%, 18% 0%, 82% 0%, 100% 50%, 82% 100%, 18% 100%);
+    box-shadow: 0 0 8px rgba(255, 179, 0, 0.6);
+  }
+  .ship-spark {
+    position: absolute;
+    width: 4px; height: 4px;
+    background: #ff3030;
+    border-radius: 50%;
+    box-shadow: 0 0 6px #ff5050;
+    animation: spark-blink 0.6s steps(2) infinite;
+  }
+  .ship-spark.s1 { top: 55%; left: 40%; }
+  .ship-spark.s2 { top: 48%; left: 58%; animation-delay: 0.3s; }
+  @keyframes spark-blink {
+    0%, 50% { opacity: 1; }
+    50.1%, 100% { opacity: 0.2; }
+  }
+  .schem-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    justify-content: center;
+  }
+  .stat-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+  }
+  .stat-row .lbl { width: 38px; color: rgba(140, 200, 255, 0.6); }
+  .stat-row .bar { flex: 1; height: 6px; background: rgba(0, 180, 255, 0.08); }
+  .stat-row .bar > span { display: block; height: 100%; }
+  .stat-row.shd .bar > span { width: 87%; background: #00e5ff; box-shadow: 0 0 4px #00e5ff; }
+  .stat-row.arm .bar > span { width: 78%; background: #ffb300; box-shadow: 0 0 4px #ffb300; }
+  .stat-row.hul .bar > span { width: 60%; background: #ff5050; box-shadow: 0 0 4px #ff5050; }
+  .stat-row.spd .bar > span { width: 34%; background: #00e5ff; box-shadow: 0 0 4px #00e5ff; }
+  .stat-row .num { width: 28px; text-align: right; color: currentColor; }
+  .schem-buttons {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .schem-btn {
+    flex: 1;
+    padding: 5px 0;
+    background: rgba(0, 25, 55, 0.95);
+    border: 1px solid rgba(0, 180, 255, 0.4);
+    color: #00cfff;
+    font-size: 8px;
+    letter-spacing: 0.18em;
+    text-align: center;
+    text-shadow: 0 0 6px currentColor;
+  }
+  .schem-btn.fire { color: #ff6622; }
+  .schem-btn.warp { color: #cc88ff; }
+
+  /* ────────────────────────────────────────────────────────────────────── */
+  /* 5. HEXAGONAL HONEYCOMB                                                */
+  /* ────────────────────────────────────────────────────────────────────── */
+  .hex-wrap {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: repeat(5, 38px);
+    gap: 2px 4px;
+    width: 220px;
+  }
+  .hex-row {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+  }
+  .hex-row.offset { margin-left: 21px; }
+  .hex {
+    width: 38px;
+    height: 42px;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: rgba(0, 30, 60, 0.6);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    color: rgba(0, 200, 255, 0.4);
+    position: relative;
+  }
+  .hex.lit { background: rgba(0, 80, 140, 0.85); color: #00e5ff; text-shadow: 0 0 6px #00e5ff; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); }
+  .hex.shd { background: rgba(0, 80, 140, 0.85); color: #00e5ff; text-shadow: 0 0 6px #00e5ff; }
+  .hex.arm { background: rgba(120, 80, 0, 0.85); color: #ffb300; text-shadow: 0 0 6px #ffb300; }
+  .hex.hul { background: rgba(20, 90, 50, 0.85); color: #69f0ae; text-shadow: 0 0 6px #69f0ae; }
+  .hex.fire { background: rgba(80, 20, 0, 0.85); color: #ff6622; text-shadow: 0 0 6px #ff6622; }
+  .hex.warp { background: rgba(40, 0, 70, 0.85); color: #cc88ff; text-shadow: 0 0 6px #cc88ff; }
+  .hex.dim { background: rgba(0, 20, 40, 0.6); color: rgba(0, 100, 150, 0.3); }
+
+  /* ────────────────────────────────────────────────────────────────────── */
+  /* 6. CURRENT HUD (reference)                                            */
+  /* ────────────────────────────────────────────────────────────────────── */
+  .cur-panel {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 280px;
+    background: rgba(0, 7, 22, 0.92);
+    border: 1px solid rgba(0, 180, 255, 0.35);
+    padding: 10px 14px 12px;
+    clip-path: polygon(
+      14px 0%, calc(100% - 14px) 0%,
+      100% 14px, 100% calc(100% - 14px),
+      calc(100% - 14px) 100%, 14px 100%,
+      0% calc(100% - 14px), 0% 14px
+    );
+  }
+  .cur-title {
+    font-size: 8px;
+    letter-spacing: 0.28em;
+    color: rgba(0, 210, 255, 0.75);
+    text-transform: uppercase;
+    text-align: center;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(0, 180, 255, 0.18);
+  }
+  .cur-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .cur-row .lbl { font-size: 8px; letter-spacing: 0.18em; color: rgba(140, 200, 255, 0.6); width: 38px; }
+  .cur-row .track { flex: 1; height: 6px; background: rgba(0, 180, 255, 0.06); border: 1px solid rgba(0, 160, 255, 0.18); }
+  .cur-row .track > span { display: block; height: 100%; }
+  .cur-row.shd .track > span { width: 87%; background: #00e5ff; }
+  .cur-row.arm .track > span { width: 78%; background: #ffb300; }
+  .cur-row.hul .track > span { width: 93%; background: #69f0ae; }
+  .cur-row.spd .track > span { width: 34%; background: #00e5ff; }
+  .cur-row .pct { font-size: 8px; width: 24px; text-align: right; color: currentColor; }
+  .cur-buttons {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .cur-btn {
+    flex: 1;
+    padding: 4px 0;
+    background: rgba(0, 25, 55, 0.95);
+    border: 1px solid rgba(0, 160, 255, 0.35);
+    color: #00cfff;
+    font-size: 7px;
+    letter-spacing: 0.2em;
+    text-align: center;
+    clip-path: polygon(6px 0%, calc(100% - 6px) 0%, 100% 50%, calc(100% - 6px) 100%, 6px 100%, 0% 50%);
+  }
+  .cur-btn.fire { color: #ff6622; }
+
+  .footer {
+    text-align: center;
+    margin-top: 36px;
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: rgba(140, 200, 255, 0.4);
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<h1>HUD Redesign — 5 Alternatives</h1>
+<div class="sub">Pick a direction · current HUD shown for reference</div>
+
+<div class="grid">
+
+  <!-- 1. HOLOGRAPHIC ORB ────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-num">01</div>
+    <div class="card-title">◉ Holographic Orb</div>
+    <div class="card-blurb">
+      Pulsing core wrapped in three concentric arc rings (shield / armor / hull).
+      Speed drives the pulse rate. Action chips orbit the rim.
+      Most futuristic; very compact.
+    </div>
+    <div class="card-stage stage-stars">
+      <div class="orb-wrap">
+        <div class="orb-ring r1"></div>
+        <div class="orb-ring r2"></div>
+        <div class="orb-ring r3"></div>
+        <div class="orb-core"></div>
+        <div class="orb-label l1">SHD 87</div>
+        <div class="orb-label l2">ARM 78</div>
+        <div class="orb-label l3">HUL 93</div>
+        <div class="orb-buttons">
+          <div class="orb-btn b1">⚡</div>
+          <div class="orb-btn b2">■</div>
+          <div class="orb-btn b3">▲</div>
+          <div class="orb-btn b4">◆</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. JET FIGHTER VERTICAL TAPES ─────────────────────────────────── -->
+  <div class="card">
+    <div class="card-num">02</div>
+    <div class="card-title">▯ Jet Fighter Tapes</div>
+    <div class="card-blurb">
+      Vertical scrolling tapes anchored to screen edges — F-16 / Elite-Dangerous style.
+      Health on the left, speed tape on the right (aviation convention),
+      action buttons across the bottom.
+    </div>
+    <div class="card-stage stage-stars">
+      <div class="tapes">
+        <div class="tape-group left">
+          <div class="tape-col">
+            <div class="tape-cap">SHD</div>
+            <div class="tape shd"><div class="tape-fill"></div></div>
+            <div class="tape-num" style="color:#00e5ff">87</div>
+          </div>
+          <div class="tape-col">
+            <div class="tape-cap">ARM</div>
+            <div class="tape arm"><div class="tape-fill"></div></div>
+            <div class="tape-num" style="color:#ffb300">78</div>
+          </div>
+          <div class="tape-col">
+            <div class="tape-cap">HUL</div>
+            <div class="tape hul"><div class="tape-fill"></div></div>
+            <div class="tape-num" style="color:#69f0ae">93</div>
+          </div>
+        </div>
+        <div class="tape-group right">
+          <div class="tape-col">
+            <div class="tape-cap">SPD</div>
+            <div class="tape spd"><div class="tape-fill"></div></div>
+            <div class="tape-num" style="color:#00e5ff">340</div>
+          </div>
+        </div>
+        <div class="tape-buttons">
+          <div class="tape-btn">⚡</div>
+          <div class="tape-btn">■</div>
+          <div class="tape-btn fire">▲</div>
+          <div class="tape-btn warp">◆</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. RADIAL PIE FAN ─────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-num">03</div>
+    <div class="card-title">◗ Radial Pie Fan</div>
+    <div class="card-blurb">
+      Semicircular fan rises from bottom-center, divided into colored slices.
+      Sweeping needle shows speed across the outer arc.
+      Buttons live as round chips along the rim. Mandala / arcade feel.
+    </div>
+    <div class="card-stage stage-stars" style="overflow:hidden">
+      <div class="fan-wrap">
+        <div class="fan-bg"></div>
+        <div class="fan-label shd">SHD</div>
+        <div class="fan-label arm">ARM</div>
+        <div class="fan-label hul">HUL</div>
+        <div class="fan-needle"></div>
+        <div class="fan-speed">340</div>
+        <div class="fan-buttons">
+          <div class="fan-btn">⚡</div>
+          <div class="fan-btn">■</div>
+          <div class="fan-btn fire">▲</div>
+          <div class="fan-btn warp">◆</div>
+          <div class="fan-btn mine">◇</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. DIEGETIC SHIP SCHEMATIC ────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-num">04</div>
+    <div class="card-title">◈ Diegetic Ship Schematic</div>
+    <div class="card-blurb">
+      Top-down silhouette of <em>your ship</em>. Shield = pulsing halo.
+      Armor = colored plating. Hull damage = sparks rendered on the hull itself.
+      Most immersive; least abstract.
+    </div>
+    <div class="card-stage stage-stars">
+      <div class="schem">
+        <div class="ship-art">
+          <div class="ship-halo"></div>
+          <div class="ship-body"></div>
+          <div class="ship-spark s1"></div>
+          <div class="ship-spark s2"></div>
+        </div>
+        <div class="schem-stats">
+          <div class="stat-row shd"><span class="lbl">SHD</span><span class="bar"><span></span></span><span class="num" style="color:#00e5ff">87</span></div>
+          <div class="stat-row arm"><span class="lbl">ARM</span><span class="bar"><span></span></span><span class="num" style="color:#ffb300">78</span></div>
+          <div class="stat-row hul"><span class="lbl">HUL</span><span class="bar"><span></span></span><span class="num" style="color:#ff5050">60</span></div>
+          <div class="stat-row spd"><span class="lbl">SPD</span><span class="bar"><span></span></span><span class="num" style="color:#00e5ff">340</span></div>
+        </div>
+        <div class="schem-buttons">
+          <div class="schem-btn">⚡ THR</div>
+          <div class="schem-btn">■ STP</div>
+          <div class="schem-btn fire">▲ FIRE</div>
+          <div class="schem-btn warp">◆ WARP</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. HEXAGONAL HONEYCOMB ────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-num">05</div>
+    <div class="card-title">⬡ Hexagonal Honeycomb</div>
+    <div class="card-blurb">
+      Modular hex tiles in a honeycomb. Health = number of lit tiles per system.
+      Action tiles flash on activation. Borderlands / Destiny-Ghost vibe;
+      easy to add/remove modules.
+    </div>
+    <div class="card-stage stage-stars">
+      <div class="hex-wrap">
+        <div class="hex-row">
+          <div class="hex shd">87</div>
+          <div class="hex arm">78</div>
+          <div class="hex hul">93</div>
+          <div class="hex lit">SPD</div>
+        </div>
+        <div class="hex-row offset">
+          <div class="hex shd">█</div>
+          <div class="hex arm">█</div>
+          <div class="hex hul">█</div>
+          <div class="hex dim">·</div>
+        </div>
+        <div class="hex-row">
+          <div class="hex lit">⚡</div>
+          <div class="hex lit">■</div>
+          <div class="hex fire">▲</div>
+          <div class="hex warp">◆</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. CURRENT HUD (REFERENCE) ────────────────────────────────────── -->
+  <div class="card" style="border-color: rgba(255, 140, 0, 0.35);">
+    <div class="card-num">REF</div>
+    <div class="card-title" style="color:#ff8c00; text-shadow:0 0 10px rgba(255,140,0,0.5);">▣ Current HUD</div>
+    <div class="card-blurb">
+      What's in the game today — horizontal bars, speed slider, button strip.
+      Functional but generic; the redesign should feel more distinctive.
+    </div>
+    <div class="card-stage stage-stars">
+      <div class="cur-panel">
+        <div class="cur-title">◆ SHIP SYSTEMS ◆</div>
+        <div class="cur-row shd"><span class="lbl">SHD</span><span class="track"><span></span></span><span class="pct" style="color:#00e5ff">87%</span></div>
+        <div class="cur-row arm"><span class="lbl">ARM</span><span class="track"><span></span></span><span class="pct" style="color:#ffb300">78%</span></div>
+        <div class="cur-row hul"><span class="lbl">HUL</span><span class="track"><span></span></span><span class="pct" style="color:#69f0ae">93%</span></div>
+        <div class="cur-row spd"><span class="lbl">SPD</span><span class="track"><span></span></span><span class="pct" style="color:#00e5ff">340</span></div>
+        <div class="cur-buttons">
+          <div class="cur-btn">⚡ THR</div>
+          <div class="cur-btn">■ STP</div>
+          <div class="cur-btn fire">▲ FIRE</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">Open in browser · pick one to refine · re-enter plan mode for the rewrite</div>
+
+</body>
+</html>
