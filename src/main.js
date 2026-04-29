@@ -583,6 +583,14 @@ function startGame() {
   camera.lookAt(ship.position);
 
   // ── Target HUD update ──────────────────────────────────────────────────
+  // Auto-untarget when locked NPC has been destroyed
+  if (currentTarget) {
+    const npcCheck = fleet.shipForMesh(currentTarget);
+    if (npcCheck && npcCheck._state === 'dead') {
+      currentTarget = null;
+      hud.clearTarget();
+    }
+  }
   if (currentTarget) {
     currentTarget.getWorldPosition(_tgtWorldPos);
     const dist = ship.position.distanceTo(_tgtWorldPos);

@@ -15,6 +15,7 @@ const _dir      = new THREE.Vector3();
 const _targetQ  = new THREE.Quaternion();
 const _fromAxis = new THREE.Vector3(1, 0, 0);  // ship local forward = +X
 const _worldUp  = new THREE.Vector3(0, 0, 1);  // world up for orbit tangent
+const _tmpPos   = new THREE.Vector3();
 
 // ── Colour variants ───────────────────────────────────────────────────────────
 const VARIANTS = [
@@ -59,8 +60,9 @@ const mkStd = (color, emissive = 0x000000, metalness = 0.75, roughness = 0.25) =
 
 // ── NPCShip (internal) ────────────────────────────────────────────────────────
 class NPCShip {
-  constructor(scene, variant, spawnPos, hullProps) {
-    this._scene  = scene;
+  constructor(scene, variant, spawnPos, hullProps, onDeath = null) {
+    this._scene   = scene;
+    this._onDeath = onDeath;
 
     this.group = new THREE.Group();
     this.group.position.copy(spawnPos);
@@ -71,6 +73,9 @@ class NPCShip {
     this._thrusterIntensity = 0.15;
     this._emitAccum         = 0;
     this._nextParticle      = 0;
+
+    this._prevPos = this.group.position.clone();
+    this.velocity = new THREE.Vector3();   // world-space u/s, sampled per frame
 
     // Health — shield absorbs first, then armor, then hull
     this.shield = 100;
@@ -246,7 +251,12 @@ class NPCShip {
   // ── Update (called every frame) ───────────────────────────────────────────
 
   update(delta, playerPos, elapsed) {
-    if (this._state === 'dead') return;
+    if (this._state === 'dead') {
+      // Wrecks drift at their last velocity (with friction) — no tumble
+      this.group.position.addScaledVector(this._driftVel, delta);
+      this._driftVel.multiplyScalar(Math.max(0, 1 - delta * 0.4));
+      return;
+    }
 
     this.group.updateMatrixWorld(true);
 
@@ -337,6 +347,12 @@ class NPCShip {
       this._pPositions[i * 3 + 2] += this._pVelocities[i].z * delta;
     }
     this._pPosAttr.needsUpdate = true;
+
+    // Sample velocity for homing missiles (after position has been updated)
+    if (delta > 0) {
+      this.velocity.subVectors(this.group.position, this._prevPos).divideScalar(delta);
+    }
+    this._prevPos.copy(this.group.position);
   }
 
   // ── Health ────────────────────────────────────────────────────────────────
@@ -351,9 +367,35 @@ class NPCShip {
   }
 
   _destroy() {
-    this.group.visible          = false;
-    this._particleMesh.visible  = false;
     this._state = 'dead';
+
+    // Trigger blast at ship's last world position
+    this.group.getWorldPosition(_tmpPos);
+    this._onDeath?.(_tmpPos);
+
+    // Kill alive-only visual elements
+    this._thrusterLight.intensity = 0;
+    this._thrusterFill.intensity  = 0;
+    for (const { inner, outer, halo } of this._nozzleGlows) {
+      inner.visible = outer.visible = halo.visible = false;
+    }
+
+    // Char the hull — darken every PBR material on the ship
+    this.group.traverse(obj => {
+      if (!obj.isMesh) return;
+      const m = obj.material;
+      if (!m || !m.color) return;
+      m.color.multiplyScalar(0.18);
+      if (m.emissive) m.emissive.setHex(0x000000);
+      if ('metalness' in m) m.metalness = 0.3;
+      if ('roughness' in m) m.roughness = 0.95;
+    });
+
+    // No more thrust particles — existing live ones fade naturally, hide the mesh
+    this._particleMesh.visible = false;
+
+    // Drift inherited from last velocity (dampened)
+    this._driftVel = this.velocity.clone().multiplyScalar(0.4);
   }
 
   get healthPct() {
@@ -370,28 +412,129 @@ class NPCShip {
   }
 }
 
+// ── DeathBlast (internal) ─────────────────────────────────────────────────────
+// Bigger, longer-lived than the rocket-impact Explosion: orange-white core
+// + red outer ring + bright flash light. Used when an NPC's hull hits 0.
+
+const BLAST_DURATION  = 1.0;
+const BLAST_PARTICLES = 140;
+
+class DeathBlast {
+  constructor(scene) {
+    this._scene = scene;
+    this._age   = 0;
+
+    this._positions  = new Float32Array(BLAST_PARTICLES * 3);
+    this._velocities = Array.from({ length: BLAST_PARTICLES }, () => new THREE.Vector3());
+    this._life       = new Float32Array(BLAST_PARTICLES);
+    for (let i = 0; i < BLAST_PARTICLES; i++) this._positions[i * 3] = -1e5;
+
+    const geo = new THREE.BufferGeometry();
+    this._posAttr = new THREE.BufferAttribute(this._positions, 3);
+    geo.setAttribute('position', this._posAttr);
+    this._mesh = new THREE.Points(geo, new THREE.PointsMaterial({
+      color: 0xffaa33, size: 11, sizeAttenuation: true,
+      blending: THREE.AdditiveBlending, transparent: true, opacity: 0.95,
+      depthWrite: false,
+    }));
+    scene.add(this._mesh);
+
+    this._light = new THREE.PointLight(0xff5522, 0, 600);
+    scene.add(this._light);
+  }
+
+  get alive() { return this._age > 0; }
+
+  trigger(pos) {
+    this._age = BLAST_DURATION;
+    this._light.position.copy(pos);
+    this._light.intensity = 24;
+
+    for (let i = 0; i < BLAST_PARTICLES; i++) {
+      const dir = new THREE.Vector3(
+        Math.random() - 0.5,
+        Math.random() - 0.5,
+        Math.random() - 0.5,
+      ).normalize();
+      const speed = 200 + Math.random() * 300;
+
+      this._positions[i * 3]     = pos.x;
+      this._positions[i * 3 + 1] = pos.y;
+      this._positions[i * 3 + 2] = pos.z;
+      this._velocities[i].copy(dir).multiplyScalar(speed);
+      this._life[i] = BLAST_DURATION * (0.6 + Math.random() * 0.4);
+    }
+    this._posAttr.needsUpdate = true;
+  }
+
+  update(delta) {
+    if (!this.alive) return;
+    this._age -= delta;
+
+    const t = Math.max(0, this._age / BLAST_DURATION);
+    this._light.intensity = 24 * t * t;
+
+    for (let i = 0; i < BLAST_PARTICLES; i++) {
+      if (this._life[i] <= 0) continue;
+      this._life[i] -= delta;
+      if (this._life[i] <= 0) { this._positions[i * 3] = -1e5; continue; }
+      this._positions[i * 3]     += this._velocities[i].x * delta;
+      this._positions[i * 3 + 1] += this._velocities[i].y * delta;
+      this._positions[i * 3 + 2] += this._velocities[i].z * delta;
+    }
+    this._posAttr.needsUpdate = true;
+
+    if (!this.alive) {
+      this._light.intensity = 0;
+      for (let i = 0; i < BLAST_PARTICLES; i++) this._positions[i * 3] = -1e5;
+      this._posAttr.needsUpdate = true;
+    }
+  }
+
+  dispose() {
+    this._mesh.geometry.dispose();
+    this._mesh.material.dispose();
+    this._scene.remove(this._mesh);
+    this._scene.remove(this._light);
+  }
+}
+
 // ── NPCFleet (exported) ───────────────────────────────────────────────────────
 
 export class NPCFleet {
   constructor(scene) {
-    this._ships = VARIANTS.map(
-      (v, i) => new NPCShip(scene, v, SPAWN_POSITIONS[i], HULL_PROPS[i]),
+    this._blasts = Array.from({ length: 3 }, () => new DeathBlast(scene));
+    this._ships  = VARIANTS.map(
+      (v, i) => new NPCShip(
+        scene, v, SPAWN_POSITIONS[i], HULL_PROPS[i],
+        pos => this.triggerDeathBlast(pos),
+      ),
     );
   }
 
-  // Fuselage meshes exposed so main.js raycaster can target NPC ships
-  get targetables() { return this._ships.map(s => s.fuselage); }
+  // Fuselage meshes exposed so main.js raycaster can target NPC ships.
+  // Wrecks (dead ships) are excluded so they can't be re-targeted.
+  get targetables() {
+    return this._ships.filter(s => s._state !== 'dead').map(s => s.fuselage);
+  }
 
   // Look up which NPCShip owns a given mesh (used by RocketManager)
   shipForMesh(mesh) { return this._ships.find(s => s.fuselage === mesh) ?? null; }
 
   get ships() { return this._ships; }
 
+  triggerDeathBlast(pos) {
+    const blast = this._blasts.find(b => !b.alive);
+    if (blast) blast.trigger(pos);
+  }
+
   update(delta, playerPos, elapsed) {
     for (const s of this._ships) s.update(delta, playerPos, elapsed);
+    for (const b of this._blasts) if (b.alive) b.update(delta);
   }
 
   dispose() {
     for (const s of this._ships) s.dispose();
+    for (const b of this._blasts) b.dispose();
   }
 }
