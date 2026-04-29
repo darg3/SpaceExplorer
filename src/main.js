@@ -115,16 +115,6 @@ function buildSkybox(tex) {
   scene.background = tex;
 }
 
-<<<<<<< Updated upstream
-// Try actual file first, then fallback to procedural cube
-new THREE.TextureLoader().load(
-  'assets/GSFC_20171208_nebula.jpg',
-  tex  => buildSkybox(tex),
-  undefined,
-  ()   => new THREE.TextureLoader().load(
-    'assets/nebula.jpg',
-    tex => buildSkybox(tex),
-=======
 // Wrap a flat (non-equirectangular) photo onto a sphere without visible seams.
 // Two artifacts to fix:
 //   (1) Horizontal seam: photo's left edge ≠ right edge. We draw a copy of the
@@ -194,7 +184,6 @@ new THREE.ImageLoader().load(
   () => new THREE.ImageLoader().load(
     'assets/GSFC_20171208_nebula.jpg',
     img => buildSkybox(makeSeamlessFromImage(img)),
->>>>>>> Stashed changes
     undefined,
     ()  => buildSkybox(makeProceduralNebulaCube()),
   ),
