@@ -536,12 +536,12 @@ class DeathBlast {
 // ── NPCFleet (exported) ───────────────────────────────────────────────────────
 
 export class NPCFleet {
-  constructor(scene, onShoot = null) {
+  constructor(scene, onShoot = null, onDeath = null) {
     this._blasts = Array.from({ length: 3 }, () => new DeathBlast(scene));
     this._ships  = VARIANTS.map(
       (v, i) => new NPCShip(
         scene, v, SPAWN_POSITIONS[i], HULL_PROPS[i],
-        pos => this.triggerDeathBlast(pos),
+        pos => { this.triggerDeathBlast(pos); onDeath?.(pos); },
         onShoot,
       ),
     );

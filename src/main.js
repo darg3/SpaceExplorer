@@ -6,6 +6,7 @@ import { World }        from './world.js';
 import { HUD }          from './hud.js';
 import { NPCFleet }     from './npcs.js';
 import { RocketManager }  from './rockets.js';
+import { LootManager }    from './loot.js';
 import { Menu }           from './menu.js';
 import { MobileControls } from './mobile.js';
 
@@ -235,12 +236,36 @@ const rockets = new RocketManager(scene);
 // applied to the wreck.
 let _playerDead = false;
 
+// Persistent credits counter — increments on each loot pickup.
+let score = 0;
+
+// Loot manager — spawns drops on NPC death, applies pickups on player contact.
+const loot = new LootManager(scene, ({ type }) => {
+  if (_playerDead) return;
+  if (type === 'shield') {
+    ship.shield = Math.min(100, ship.shield + 30);
+    score += 100;
+    hud.showCombatMessage('+30 Shield  (+100 cr)');
+  } else {
+    ship.hull = Math.min(100, ship.hull + 15);
+    score += 200;
+    hud.showCombatMessage('+15 Hull  (+200 cr)');
+  }
+  hud.setScore(score);
+});
+hud.setScore(score);
+
 // NPC fires a rocket at the player ship. Damage is deferred via onHit until
 // the rocket detonates (RocketManager.update calls onHit on close approach).
-const fleet = new NPCFleet(scene, (originPos, npcName) => {
-  if (_playerDead) return;
-  rockets.fire(originPos, ship.group, () => onPlayerHit(npcName, NPC_ROCKET_DAMAGE));
-});
+// On NPC death, the fleet calls our onDeath hook which spawns a loot drop.
+const fleet = new NPCFleet(
+  scene,
+  (originPos, npcName) => {
+    if (_playerDead) return;
+    rockets.fire(originPos, ship.group, () => onPlayerHit(npcName, NPC_ROCKET_DAMAGE));
+  },
+  pos => loot.spawn(pos),
+);
 
 let elapsed = 0;
 
@@ -615,6 +640,7 @@ function startGame() {
   hud.setHullWarning(ship.hull < 20);
   fleet.update(delta, ship.position, elapsed);
   rockets.update(delta, fleet);
+  loot.update(delta, ship.position);
   stars.update(ship.position);
   _warpCooldown = Math.max(0, _warpCooldown - delta);
 
