@@ -656,6 +656,87 @@ export class HUD {
   transform: scaleX(1);
 }
 
+/* ── Combat log (NPC-hits-you message) ────────────────── */
+#combat-log {
+  position: fixed;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 60;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  color: #ff5555;
+  text-shadow: 0 0 8px rgba(255, 60, 60, 0.7);
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.18s ease-out;
+  white-space: nowrap;
+}
+#combat-log.show { opacity: 1; }
+
+/* ── Game-over overlay ────────────────────────────────── */
+#game-over {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  background: radial-gradient(ellipse at center,
+    rgba(20, 0, 0, 0.55) 0%,
+    rgba(0, 0, 0, 0.85) 70%,
+    rgba(0, 0, 0, 0.95) 100%
+  );
+  font-family: 'Courier New', monospace;
+}
+#game-over .go-panel {
+  background: rgba(0, 7, 22, 0.94);
+  border: 1px solid rgba(255, 80, 80, 0.55);
+  padding: 36px 56px 28px;
+  text-align: center;
+  clip-path: polygon(
+    18px 0%,   calc(100% - 18px) 0%,
+    100% 18px, 100% calc(100% - 18px),
+    calc(100% - 18px) 100%, 18px 100%,
+    0% calc(100% - 18px), 0% 18px
+  );
+  filter: drop-shadow(0 0 18px rgba(255, 60, 60, 0.45));
+}
+#game-over .go-title {
+  color: #ff5555;
+  font-size: 28px;
+  letter-spacing: 0.4em;
+  text-shadow: 0 0 18px rgba(255, 60, 60, 0.85);
+  margin-bottom: 8px;
+}
+#game-over .go-sub {
+  color: rgba(220, 200, 200, 0.75);
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  margin-bottom: 22px;
+}
+#game-over .go-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  background: transparent;
+  color: #00e5ff;
+  border: 1px solid rgba(0, 180, 255, 0.55);
+  padding: 10px 22px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0, 200, 255, 0.6);
+  transition: background 0.15s, color 0.15s;
+}
+#game-over .go-btn:hover {
+  background: rgba(0, 180, 255, 0.15);
+  color: #ffffff;
+}
+
 /* ── Context menu ─────────────────────────────────────── */
 #ctx-menu {
   position: fixed;
@@ -1124,6 +1205,29 @@ export class HUD {
     this._warpFlash = flash;
     this._warpDestName = flash.querySelector("#warp-dest-name");
 
+    // Combat log — small fading text shown when an NPC damages the player
+    const combatLog = document.createElement("div");
+    combatLog.id = "combat-log";
+    document.body.appendChild(combatLog);
+    this._combatLog      = combatLog;
+    this._combatLogTimer = null;
+
+    // Game-over overlay — shown when the player ship is destroyed
+    const gameOver = document.createElement("div");
+    gameOver.id = "game-over";
+    gameOver.innerHTML = `
+      <div class="go-panel">
+        <div class="go-title">SHIP DESTROYED</div>
+        <div class="go-sub">Hull integrity lost</div>
+        <button id="btn-restart" class="go-btn">&#10227; Restart Game</button>
+      </div>
+    `;
+    document.body.appendChild(gameOver);
+    this._gameOver  = gameOver;
+    this._restartBtn = gameOver.querySelector("#btn-restart");
+    this._onRestart  = null;
+    this._restartBtn.addEventListener("click", () => this._onRestart?.());
+
     // Cache DOM references
     this._thrusterBtn   = this._el.querySelector("#btn-thrusters");
     this._stopBtn       = this._el.querySelector("#btn-stop");
@@ -1382,6 +1486,27 @@ export class HUD {
   showWarpButton(show, label = "Target") {
     this._warpBtnRow.style.display = show ? "" : "none";
     if (show) this._warpBtn.innerHTML = `&#9889; Warp To ${label}`;
+  }
+
+  // ── Combat log ────────────────────────────────────────────────────────────
+
+  showCombatMessage(text) {
+    this._combatLog.textContent = text;
+    this._combatLog.classList.add("show");
+    if (this._combatLogTimer) clearTimeout(this._combatLogTimer);
+    this._combatLogTimer = setTimeout(
+      () => this._combatLog.classList.remove("show"),
+      1600,
+    );
+  }
+
+  // ── Game over ─────────────────────────────────────────────────────────────
+
+  setRestartCallback(fn) { this._onRestart = fn; }
+
+  showGameOver(onRestart) {
+    if (onRestart) this._onRestart = onRestart;
+    this._gameOver.style.display = "flex";
   }
 
   triggerWarpFlash(destLabel, onPeak) {

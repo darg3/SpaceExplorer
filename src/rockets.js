@@ -3,7 +3,6 @@ import * as THREE from 'three';
 // ── Tuning ────────────────────────────────────────────────────────────────────
 const ROCKET_SPEED   = 800;   // units/s
 const ROCKET_LIFE    = 4.0;   // seconds before auto-destruct
-const ROCKET_DAMAGE  = 25;    // hp per hit
 const DETONATE_DIST  = 18;    // world units — close enough = hit
 const MAX_ROCKETS    = 20;    // pool size
 const EXP_DURATION   = 0.55;  // seconds explosion lasts
@@ -23,6 +22,7 @@ class Rocket {
     this._scene = scene;
     this._life  = 0;
     this._target = null;
+    this._onHit  = null;
     this._prevPos = new THREE.Vector3();
 
     // ── Mesh ─────────────────────────────────────────────────────────────────
@@ -77,9 +77,10 @@ class Rocket {
 
   get active() { return this._life > 0; }
 
-  activate(pos, targetMesh) {
+  activate(pos, targetMesh, onHit) {
     this._life   = ROCKET_LIFE;
     this._target = targetMesh;
+    this._onHit  = onHit ?? null;
     this.group.position.copy(pos);
     this._prevPos.copy(pos);
 
@@ -98,6 +99,7 @@ class Rocket {
   deactivate() {
     this._life   = 0;
     this._target = null;
+    this._onHit  = null;
     this.group.visible    = false;
     this._light.intensity = 0;
     // Hide trail particles
@@ -310,11 +312,12 @@ export class RocketManager {
     this._explosions = Array.from({ length: 4 }, () => new Explosion(scene));
   }
 
-  // Launch a rocket from originPos homing on targetMesh.
-  fire(originPos, targetMesh) {
+  // Launch a rocket from originPos homing on targetMesh. onHit is invoked
+  // when the rocket detonates on its target (caller decides what damage to apply).
+  fire(originPos, targetMesh, onHit) {
     const rocket = this._rockets.find(r => !r.active);
     if (!rocket) return;   // pool exhausted — just drop the shot
-    rocket.activate(originPos, targetMesh);
+    rocket.activate(originPos, targetMesh, onHit);
   }
 
   update(delta, npcFleet) {
@@ -328,7 +331,7 @@ export class RocketManager {
         rocket._target.getWorldPosition(_detPos);
         const dist = _segPointDist(rocket._prevPos, rocket.group.position, _detPos);
         if (dist <= DETONATE_DIST) {
-          this._detonate(rocket, npcFleet);
+          this._detonate(rocket);
         }
       } else {
         // Target destroyed / removed — self-destruct rocket
@@ -341,15 +344,12 @@ export class RocketManager {
     }
   }
 
-  _detonate(rocket, npcFleet) {
+  _detonate(rocket) {
     // Trigger visual explosion at rocket's current position
     const exp = this._explosions.find(e => !e.alive);
     if (exp) exp.trigger(rocket.group.position.clone());
 
-    // Apply damage to the NPC that owns the target mesh
-    const npcShip = npcFleet.shipForMesh(rocket._target);
-    if (npcShip) npcShip.takeDamage(ROCKET_DAMAGE);
-
+    rocket._onHit?.(rocket);
     rocket.deactivate();
   }
 

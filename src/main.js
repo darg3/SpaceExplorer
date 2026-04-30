@@ -213,7 +213,8 @@ const SHIP_COL_RADIUS       = 15;   // approximate ship bounding sphere (world u
 const ASTEROID_DAMAGE       = 15;   // hp per collision tick
 const ASTEROID_HIT_COOLDOWN = 2.0;  // seconds between collision damage ticks
 const SHIELD_REGEN_DELAY    = 5.0;  // seconds after last damage before shields regen
-const SHIELD_REGEN_RATE     = 8;    // shield points per second
+const SHIELD_REGEN_RATE     = 0.5;  // shield points per second (1 per 2 seconds)
+const NPC_ROCKET_DAMAGE     = 3;    // hp per hit from an NPC rocket
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 const input = new InputHandler();
@@ -227,9 +228,21 @@ const world = new World(scene);
 // ── Ship ──────────────────────────────────────────────────────────────────────
 const ship    = new Ship(scene, input);
 const hud     = new HUD(ship);
-const fleet   = new NPCFleet(scene);
 const rockets = new RocketManager(scene);
-let   elapsed = 0;
+
+// Player death state — set when hull reaches 0. Gates input-driven actions
+// (firing, mining, warp, asteroid damage) and prevents further damage being
+// applied to the wreck.
+let _playerDead = false;
+
+// NPC fires a rocket at the player ship. Damage is deferred via onHit until
+// the rocket detonates (RocketManager.update calls onHit on close approach).
+const fleet = new NPCFleet(scene, (originPos, npcName) => {
+  if (_playerDead) return;
+  rockets.fire(originPos, ship.group, () => onPlayerHit(npcName, NPC_ROCKET_DAMAGE));
+});
+
+let elapsed = 0;
 
 // ── Warp ──────────────────────────────────────────────────────────────────────
 const WARP_ARRIVE_DIST = 500;   // units from target on arrival
@@ -239,6 +252,7 @@ const WARP_COOLDOWN    = 5.0;   // seconds before warp can be used again
 let _warpCooldown = 0;
 
 function doWarp() {
+  if (_playerDead) return;
   if (!currentTarget || _warpCooldown > 0) return;
 
   const targetPos = new THREE.Vector3();
@@ -314,6 +328,7 @@ function _positionBeam(beam, start, end) {
 }
 
 function startMining() {
+  if (_playerDead) return;
   if (!currentTarget || currentTarget.userData.mined || _isMining) return;
   _isMining    = true;
   _miningAccum = 0;
@@ -340,13 +355,39 @@ function stopMining(completed) {
   _miningTgt = null;
 }
 
+// ── Player damage handler (called when NPC rockets detonate on the ship) ─────
+function onPlayerHit(npcName, dmg) {
+  if (_playerDead) return;
+  ship.takeDamage(dmg);
+  hud.flashDamage();
+  hud.showCombatMessage(`${npcName} does ${dmg} damage to your ship`);
+  _timeSinceHit = 0;
+  if (ship.hull <= 0) killPlayer();
+}
+
+function killPlayer() {
+  if (_playerDead) return;
+  _playerDead = true;
+  ship.destroyShip();
+  if (_isMining) stopMining(false);
+  currentTarget = null;
+  hud.clearTarget();
+  hud.showMineButton(false);
+  hud.showWarpButton(false);
+  hud.setHullWarning(false);
+  hud.showGameOver(() => location.reload());
+}
+
 // ── FIRE button callback ──────────────────────────────────────────────────────
+const PLAYER_ROCKET_DAMAGE = 25;
+
 hud.setFireCallback(() => {
+  if (_playerDead) return;
   if (!currentTarget) return;
   const npc = fleet.shipForMesh(currentTarget);
   if (!npc || npc._state === 'dead') return;
   const [turretPos] = ship.getTurretPositions();
-  rockets.fire(turretPos, currentTarget);
+  rockets.fire(turretPos, currentTarget, () => npc.takeDamage(PLAYER_ROCKET_DAMAGE));
   hud.triggerFireCooldown(600);
 });
 
@@ -441,14 +482,14 @@ canvas.addEventListener('contextmenu', e => {
     if (npcShip._state === 'dead') continue;
     npcShip.group.getWorldPosition(_tgtWorldPos);
     const dist = ship.position.distanceTo(_tgtWorldPos);
-    const lbl  = npcShip.fuselage.userData.label;
+    const lbl  = npcShip.hitbox.userData.label;
     items.push({
       category: 'Contact',
       label:    lbl,
       subtype:  'Hostile Fighter',
       dist,
       onSelect: () => {
-        currentTarget = npcShip.fuselage;
+        currentTarget = npcShip.hitbox;
         hud.setTarget(lbl, 'Hostile Fighter', true);
       },
     });
@@ -547,20 +588,21 @@ function startGame() {
 
   // ── Asteroid collision damage ──────────────────────────────────────────
   _timeSinceHit += delta;
-  if (ship.hull > 0 && _timeSinceHit > ASTEROID_HIT_COOLDOWN) {
+  if (!_playerDead && ship.hull > 0 && _timeSinceHit > ASTEROID_HIT_COOLDOWN) {
     for (const ast of world.asteroids) {
       const r = ast.userData.radius ?? 20;
       if (ship.position.distanceTo(ast.position) < r + SHIP_COL_RADIUS) {
         ship.takeDamage(ASTEROID_DAMAGE);
         hud.flashDamage();
         _timeSinceHit = 0;
+        if (ship.hull <= 0) killPlayer();
         break;
       }
     }
   }
 
   // Shield regen after delay
-  if (_timeSinceHit > SHIELD_REGEN_DELAY && ship.shield < 100) {
+  if (!_playerDead && _timeSinceHit > SHIELD_REGEN_DELAY && ship.shield < 100) {
     ship.shield = Math.min(100, ship.shield + SHIELD_REGEN_RATE * delta);
   }
 
