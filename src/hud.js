@@ -500,6 +500,42 @@ export class HUD {
 }
 .hud-speed-num small { font-size: 8px; opacity: 0.7; }
 
+/* ── Credits panel (top-left) ────────────────────────── */
+.hud-score-panel {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  padding: 7px 14px;
+  background: rgba(0, 7, 22, 0.92);
+  border: 1px solid rgba(0, 180, 255, 0.35);
+  clip-path: polygon(
+    12px 0%, 100% 0%,
+    100% calc(100% - 12px), calc(100% - 12px) 100%,
+    0% 100%, 0% 12px
+  );
+  pointer-events: none;
+  transform: scale(var(--hud-scale));
+  transform-origin: top left;
+  filter: drop-shadow(0 0 6px rgba(0, 180, 255, 0.45));
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: 'Courier New', monospace;
+}
+.hud-score-label {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: rgba(0, 200, 255, 0.75);
+}
+.hud-score-num {
+  font-size: 18px;
+  font-weight: bold;
+  color: #00e5ff;
+  text-shadow: 0 0 6px #00ccff;
+  min-width: 36px;
+  text-align: right;
+}
+
 /* ── Target info panel (top-right) ───────────────────── */
 .tgt-panel {
   position: fixed;
@@ -1152,6 +1188,12 @@ export class HUD {
     this._el = document.createElement("div");
     this._el.id = "hud";
     this._el.innerHTML = `
+      <!-- Credits counter — top-left, persistent -->
+      <div class="hud-score-panel" id="hud-score">
+        <span class="hud-score-label">CREDITS</span>
+        <span class="hud-score-num" id="hud-score-num">0</span>
+      </div>
+
       <!-- Target info panel — top-right, hidden until a target is locked -->
       <div class="tgt-panel" id="tgt-panel" style="display:none">
         <div class="tgt-header">
@@ -1341,11 +1383,18 @@ export class HUD {
     this._orbShdNum = this._el.querySelector("#orb-shd-num");
     this._orbArmNum = this._el.querySelector("#orb-arm-num");
     this._orbHulNum = this._el.querySelector("#orb-hul-num");
+    this._scoreNum  = this._el.querySelector("#hud-score-num");
 
     // Initialize arcs at full health
     _setArc(this._orbShdArc, 100, 78);
     _setArc(this._orbArmArc, 100, 64);
     _setArc(this._orbHulArc, 100, 50);
+  }
+
+  // ── Score ─────────────────────────────────────────────────────────────────
+
+  setScore(n) {
+    this._scoreNum.textContent = String(n);
   }
 
   // ── Button events ─────────────────────────────────────────────────────────
