@@ -8,6 +8,9 @@ const ORBIT_SPEED    = 180;   // units/s tangential speed while circling player
 const NPC_PARTICLES  = 200;   // particle pool per ship
 const EMIT_RATE      = 55;    // particles/sec at full thruster intensity
 const TURN_RATE      = 2.0;   // slerp rate for orientation tracking
+const FIRE_COOLDOWN_MIN = 2.5;// seconds between NPC shots (lower bound)
+const FIRE_COOLDOWN_MAX = 4.5;// seconds between NPC shots (upper bound)
+const FIRE_RANGE        = 700;// units — only fire when player is within range
 
 // ── Reusable temporaries (sequential per-frame updates — no concurrency) ──────
 const _fwd      = new THREE.Vector3();
@@ -16,6 +19,7 @@ const _targetQ  = new THREE.Quaternion();
 const _fromAxis = new THREE.Vector3(1, 0, 0);  // ship local forward = +X
 const _worldUp  = new THREE.Vector3(0, 0, 1);  // world up for orbit tangent
 const _tmpPos   = new THREE.Vector3();
+const _muzzleWp = new THREE.Vector3();
 
 // ── Colour variants ───────────────────────────────────────────────────────────
 const VARIANTS = [
@@ -60,9 +64,11 @@ const mkStd = (color, emissive = 0x000000, metalness = 0.75, roughness = 0.25) =
 
 // ── NPCShip (internal) ────────────────────────────────────────────────────────
 class NPCShip {
-  constructor(scene, variant, spawnPos, hullProps, onDeath = null) {
+  constructor(scene, variant, spawnPos, hullProps, onDeath = null, onShoot = null) {
     this._scene   = scene;
     this._onDeath = onDeath;
+    this._onShoot = onShoot;
+    this._name    = variant.name;
 
     this.group = new THREE.Group();
     this.group.position.copy(spawnPos);
@@ -73,6 +79,11 @@ class NPCShip {
     this._thrusterIntensity = 0.15;
     this._emitAccum         = 0;
     this._nextParticle      = 0;
+
+    // Stagger initial fire timer so the three hunters don't volley in lockstep
+    this._fireCooldown = 1.5 + Math.random() * 2.5;
+    // Local muzzle offset, just past the nose tip (nose center at x=45 + noseH/2)
+    this._muzzleLocal = new THREE.Vector3(45 + hullProps.noseH + 6, 0, 0);
 
     this._prevPos = this.group.position.clone();
     this.velocity = new THREE.Vector3();   // world-space u/s, sampled per frame
@@ -304,6 +315,19 @@ class NPCShip {
       targetIntensity = 0.15;
     }
 
+    // ── Fire rockets at the player while engaged ──────────────────────────
+    if (this._onShoot && this._state !== 'idle') {
+      this._fireCooldown -= delta;
+      if (this._fireCooldown <= 0) {
+        if (dist <= FIRE_RANGE) {
+          _muzzleWp.copy(this._muzzleLocal).applyMatrix4(this.group.matrixWorld);
+          this._onShoot(_muzzleWp.clone(), this._name);
+        }
+        this._fireCooldown =
+          FIRE_COOLDOWN_MIN + Math.random() * (FIRE_COOLDOWN_MAX - FIRE_COOLDOWN_MIN);
+      }
+    }
+
     // Lerp thruster intensity
     const rate = targetIntensity > this._thrusterIntensity ? 3.0 : 1.8;
     this._thrusterIntensity = THREE.MathUtils.clamp(
@@ -502,12 +526,13 @@ class DeathBlast {
 // ── NPCFleet (exported) ───────────────────────────────────────────────────────
 
 export class NPCFleet {
-  constructor(scene) {
+  constructor(scene, onShoot = null) {
     this._blasts = Array.from({ length: 3 }, () => new DeathBlast(scene));
     this._ships  = VARIANTS.map(
       (v, i) => new NPCShip(
         scene, v, SPAWN_POSITIONS[i], HULL_PROPS[i],
         pos => this.triggerDeathBlast(pos),
+        onShoot,
       ),
     );
   }

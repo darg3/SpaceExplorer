@@ -41,6 +41,10 @@ export class Ship {
     this.hull              = MAX_HULL;
     this._emitAccum      = 0;
     this._nextParticle   = 0;
+    this._dead           = false;
+    this._driftVel       = new THREE.Vector3();
+    this._velocity       = new THREE.Vector3();
+    this._prevPos        = new THREE.Vector3();
 
     this._buildHull();
     this._buildThrusters();
@@ -52,6 +56,7 @@ export class Ship {
   // ── Health ────────────────────────────────────────────────────────────────
 
   takeDamage(amount) {
+    if (this._dead) return;
     if (this.shield > 0) {
       const a = Math.min(this.shield, amount);
       this.shield -= a;
@@ -63,6 +68,36 @@ export class Ship {
       amount -= a;
     }
     if (amount > 0) this.hull = Math.max(0, this.hull - amount);
+  }
+
+  // Convert the ship into a drifting wreck — mirrors NPCShip._destroy().
+  // After this, update() only drifts the ship and skips all input/thrust logic.
+  destroyShip() {
+    if (this._dead) return;
+    this._dead = true;
+
+    this._driftVel.copy(this._velocity).multiplyScalar(0.4);
+
+    // Kill thruster glow
+    this._thrusterLight.intensity = 0;
+    this._thrusterFill.intensity  = 0;
+    for (const { inner, outer, halo } of this._nozzleGlows) {
+      inner.visible = outer.visible = halo.visible = false;
+    }
+
+    // Char the hull — darken every PBR material on the ship
+    this.group.traverse(obj => {
+      if (!obj.isMesh) return;
+      const m = obj.material;
+      if (!m || !m.color) return;
+      m.color.multiplyScalar(0.18);
+      if (m.emissive) m.emissive.setHex(0x000000);
+      if ('metalness' in m) m.metalness = 0.3;
+      if ('roughness' in m) m.roughness = 0.95;
+    });
+
+    // No more thrust particles — existing live ones fade out, hide the mesh
+    this._particleMesh.visible = false;
   }
 
   // ── Hull ──────────────────────────────────────────────────────────────────
@@ -260,6 +295,15 @@ export class Ship {
   // ── Update (call every frame) ─────────────────────────────────────────────
 
   update(delta) {
+    if (this._dead) {
+      // Wrecks drift at their last velocity (with friction)
+      this.group.position.addScaledVector(this._driftVel, delta);
+      this._driftVel.multiplyScalar(Math.max(0, 1 - delta * 0.4));
+      this.speed = 0;
+      this.group.updateMatrixWorld(true);
+      return;
+    }
+
     this.group.updateMatrixWorld(true);
 
     const inp = this._input;
@@ -338,6 +382,12 @@ export class Ship {
     }
 
     this._pPosAttr.needsUpdate = true;
+
+    // Sample velocity for wreck drift inheritance (after position has been updated)
+    if (delta > 0) {
+      this._velocity.subVectors(this.group.position, this._prevPos).divideScalar(delta);
+    }
+    this._prevPos.copy(this.group.position);
   }
 
   dispose() {
