@@ -213,8 +213,8 @@ const SHIP_COL_RADIUS       = 15;   // approximate ship bounding sphere (world u
 const ASTEROID_DAMAGE       = 15;   // hp per collision tick
 const ASTEROID_HIT_COOLDOWN = 2.0;  // seconds between collision damage ticks
 const SHIELD_REGEN_DELAY    = 5.0;  // seconds after last damage before shields regen
-const SHIELD_REGEN_RATE     = 8;    // shield points per second
-const NPC_ROCKET_DAMAGE     = 1;    // hp per hit from an NPC rocket
+const SHIELD_REGEN_RATE     = 0.5;  // shield points per second (1 per 2 seconds)
+const NPC_ROCKET_DAMAGE     = 3;    // hp per hit from an NPC rocket
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 const input = new InputHandler();
@@ -482,14 +482,14 @@ canvas.addEventListener('contextmenu', e => {
     if (npcShip._state === 'dead') continue;
     npcShip.group.getWorldPosition(_tgtWorldPos);
     const dist = ship.position.distanceTo(_tgtWorldPos);
-    const lbl  = npcShip.fuselage.userData.label;
+    const lbl  = npcShip.hitbox.userData.label;
     items.push({
       category: 'Contact',
       label:    lbl,
       subtype:  'Hostile Fighter',
       dist,
       onSelect: () => {
-        currentTarget = npcShip.fuselage;
+        currentTarget = npcShip.hitbox;
         hud.setTarget(lbl, 'Hostile Fighter', true);
       },
     });

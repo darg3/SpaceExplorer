@@ -111,14 +111,24 @@ class NPCShip {
       metalness: 0.1, roughness: 0.0, transparent: true, opacity: 0.82,
     });
 
-    // Fuselage — tagged as the targetable mesh for raycasting
+    // Fuselage — visible hull mesh (no longer the targetable proxy)
     const fuselage = new THREE.Mesh(
       new THREE.CylinderGeometry(p.fusTipR, p.fusBaseR, 90, 20), body,
     );
     fuselage.rotation.z = -Math.PI / 2;
-    fuselage.userData = { targetable: true, label: v.name, type: 'Hostile Fighter' };
     this.group.add(fuselage);
-    this.fuselage = fuselage;  // exposed for NPCFleet.targetables
+    this.fuselage = fuselage;
+
+    // Invisible hitbox — generous click radius around the ship so the player
+    // can lock on without precision-aiming at the fuselage. Sized to enclose
+    // wings and nose cone with a comfortable margin.
+    const hitbox = new THREE.Mesh(
+      new THREE.SphereGeometry(95, 8, 6),
+      new THREE.MeshBasicMaterial({ visible: false }),
+    );
+    hitbox.userData = { targetable: true, label: v.name, type: 'Hostile Fighter' };
+    this.group.add(hitbox);
+    this.hitbox = hitbox;  // exposed for NPCFleet.targetables
 
     // Nose cone — position accounts for varying height so base aligns with fuselage tip
     const nose = new THREE.Mesh(new THREE.ConeGeometry(p.fusTipR, p.noseH, 20), accent);
@@ -537,14 +547,14 @@ export class NPCFleet {
     );
   }
 
-  // Fuselage meshes exposed so main.js raycaster can target NPC ships.
+  // Hitbox meshes exposed so main.js raycaster can target NPC ships.
   // Wrecks (dead ships) are excluded so they can't be re-targeted.
   get targetables() {
-    return this._ships.filter(s => s._state !== 'dead').map(s => s.fuselage);
+    return this._ships.filter(s => s._state !== 'dead').map(s => s.hitbox);
   }
 
   // Look up which NPCShip owns a given mesh (used by RocketManager)
-  shipForMesh(mesh) { return this._ships.find(s => s.fuselage === mesh) ?? null; }
+  shipForMesh(mesh) { return this._ships.find(s => s.hitbox === mesh) ?? null; }
 
   get ships() { return this._ships; }
 

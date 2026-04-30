@@ -15,7 +15,7 @@ python -m http.server 8080
 # VS Code: use the Live Server extension and click "Go Live"
 ```
 
-Then open `http://localhost:8080` in a modern browser (Chrome / Firefox / Edge).
+Then open `http://localh1ost:8080` in a modern browser (Chrome / Firefox / Edge).
 
 ---
 
@@ -32,36 +32,36 @@ On launch a full-screen menu appears over the game scene (the nebula and stars r
 
 ### Keyboard — Flight
 
-| Key | Action |
-|-----|--------|
-| `W` | Pitch up |
-| `S` | Pitch down |
-| `A` | Yaw left |
-| `D` | Yaw right |
-| `Q` | Roll left |
-| `E` | Roll right |
+| Key     | Action                              |
+| ------- | ----------------------------------- |
+| `W`     | Pitch up                            |
+| `S`     | Pitch down                          |
+| `A`     | Yaw left                            |
+| `D`     | Yaw right                           |
+| `Q`     | Roll left                           |
+| `E`     | Roll right                          |
 | `Shift` | Boost (1 000 u/s vs 400 u/s cruise) |
 
 Rotation controls work even when the engine is off.
 
 ### Mouse
 
-| Input | Action |
-|-------|--------|
-| Left-click | Lock / unlock target |
-| Right-click | Open target context menu |
-| Left-drag | Orbit camera around ship |
+| Input        | Action                         |
+| ------------ | ------------------------------ |
+| Left-click   | Lock / unlock target           |
+| Right-click  | Open target context menu       |
+| Left-drag    | Orbit camera around ship       |
 | Scroll wheel | Zoom in / out (60 – 800 units) |
 
 ### HUD Buttons
 
-| Button | Action |
-|--------|--------|
-| **Thrusters** | Toggle engine on/off |
-| **Stop Ship** | Cut engine immediately |
-| **Speed bar** | Drag to set cruise speed (0 – 1 000 u/s) |
-| **Fire Rockets** | Fire at the locked enemy target (600 ms cooldown) |
-| **Mine Asteroid** | Mine the targeted rock when within 400 units |
+| Button             | Action                                                        |
+| ------------------ | ------------------------------------------------------------- |
+| **Thrusters**      | Toggle engine on/off                                          |
+| **Stop Ship**      | Cut engine immediately                                        |
+| **Speed bar**      | Drag to set cruise speed (0 – 1 000 u/s)                      |
+| **Fire Rockets**   | Fire at the locked enemy target (600 ms cooldown)             |
+| **Mine Asteroid**  | Mine the targeted rock when within 400 units                  |
 | **Warp To Target** | Warp to the target when it is > 600 units away (5 s cooldown) |
 
 Mine and Warp buttons appear only when their conditions are met.
@@ -72,14 +72,14 @@ Mine and Warp buttons appear only when their conditions are met.
 
 On touch devices a control overlay appears automatically (hidden on desktop):
 
-| Control | Action |
-|---------|--------|
-| Left thumbstick | Pitch + Yaw |
-| **Q** button | Roll left |
-| **E** button | Roll right |
-| **BOOST** button (hold) | Max speed |
-| Single-finger drag (right half) | Orbit camera |
-| Two-finger pinch (right half) | Zoom in / out |
+| Control                         | Action        |
+| ------------------------------- | ------------- |
+| Left thumbstick                 | Pitch + Yaw   |
+| **Q** button                    | Roll left     |
+| **E** button                    | Roll right    |
+| **BOOST** button (hold)         | Max speed     |
+| Single-finger drag (right half) | Orbit camera  |
+| Two-finger pinch (right half)   | Zoom in / out |
 
 The existing HUD buttons work via tap. Tap any object in the upper part of the screen to target it.
 
@@ -141,11 +141,11 @@ A 1 024 × 1 024 canvas nebula is generated at startup with layered radial gradi
 
 Three large bodies at fixed positions:
 
-| | Color | Radius | Special |
-|-|-------|--------|---------|
-| Planet A | Blue-grey | 320 | Ring system |
-| Planet B | Rust-red | 180 | — |
-| Planet C | Deep teal | 420 | — |
+|          | Color     | Radius | Special     |
+| -------- | --------- | ------ | ----------- |
+| Planet A | Blue-grey | 320    | Ring system |
+| Planet B | Rust-red  | 180    | —           |
+| Planet C | Deep teal | 420    | —           |
 
 ### Targeting System
 
