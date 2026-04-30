@@ -520,6 +520,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  hud.onWindowResize();
 });
 
 // ── Orbit Camera ──────────────────────────────────────────────────────────────
@@ -531,6 +532,9 @@ let inspLastX    = 0;
 let inspLastY    = 0;
 
 window.addEventListener('mousedown', e => {
+  // Don't start an orbit-camera drag when the click lands on the HUD —
+  // those clicks belong to HUD panel drag-and-drop.
+  if (e.target.closest('#hud')) return;
   inspDragging = true;
   inspLastX = e.clientX;
   inspLastY = e.clientY;

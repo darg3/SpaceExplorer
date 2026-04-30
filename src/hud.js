@@ -43,6 +43,86 @@ export class HUD {
     this._injectStyle();
     this._injectDOM();
     this._bindButtons();
+    this._tgtPanelPositioned = false;
+    this._updateScale();
+    this._initLayoutAndDrag();
+  }
+
+  // ── Responsive scale ──────────────────────────────────────────────────────
+
+  _updateScale() {
+    const ref = Math.min(window.innerWidth / 1600, window.innerHeight / 900);
+    const scale = Math.max(0.5, Math.min(1.1, ref * 0.85));
+    document.documentElement.style.setProperty("--hud-scale", scale.toFixed(3));
+    this._hudScale = scale;
+  }
+
+  // ── Drag-and-drop layout ──────────────────────────────────────────────────
+
+  _initLayoutAndDrag() {
+    // Place main HUD at default bottom-center using its rendered size
+    requestAnimationFrame(() => {
+      const r = this._hudGlowWrap.getBoundingClientRect();
+      const x = (window.innerWidth - r.width) / 2;
+      const y = window.innerHeight - r.height - 28;
+      this._setPanelPos(this._hudGlowWrap, x, y);
+    });
+
+    this._attachDrag(this._hudGlowWrap);
+    this._attachDrag(this._tgtPanel);
+
+    // Document-level mousemove/mouseup so the drag continues even if the
+    // cursor leaves the panel during a fast drag
+    document.addEventListener("mousemove", e => {
+      if (!this._dragState) return;
+      const { panel, offX, offY } = this._dragState;
+      this._setPanelPos(panel, e.clientX - offX, e.clientY - offY);
+    });
+    document.addEventListener("mouseup", () => {
+      if (!this._dragState) return;
+      this._dragState.panel.classList.remove("dragging");
+      this._dragState = null;
+    });
+  }
+
+  _attachDrag(panel) {
+    panel.addEventListener("mousedown", e => {
+      // Don't start a drag when clicking interactive elements inside the panel
+      if (e.target.closest("button, input, .hud-speed-track")) return;
+      const r = panel.getBoundingClientRect();
+      this._dragState = {
+        panel,
+        offX: e.clientX - r.left,
+        offY: e.clientY - r.top,
+      };
+      panel.classList.add("dragging");
+      e.preventDefault();
+    });
+  }
+
+  // Set panel position in viewport pixels, clamped so the panel stays visible.
+  _setPanelPos(panel, x, y) {
+    const r = panel.getBoundingClientRect();
+    const maxX = Math.max(0, window.innerWidth  - r.width);
+    const maxY = Math.max(0, window.innerHeight - r.height);
+    const cx = Math.max(0, Math.min(maxX, x));
+    const cy = Math.max(0, Math.min(maxY, y));
+    panel.style.left = cx + "px";
+    panel.style.top  = cy + "px";
+  }
+
+  // Called from main.js's window resize listener.
+  onWindowResize() {
+    this._updateScale();
+    // Re-clamp positions; panels stay where they were unless they'd go offscreen
+    requestAnimationFrame(() => {
+      const hr = this._hudGlowWrap.getBoundingClientRect();
+      this._setPanelPos(this._hudGlowWrap, hr.left, hr.top);
+      if (this._tgtPanelPositioned) {
+        const tr = this._tgtPanel.getBoundingClientRect();
+        this._setPanelPos(this._tgtPanel, tr.left, tr.top);
+      }
+    });
   }
 
   // ── Style ─────────────────────────────────────────────────────────────────
@@ -50,6 +130,8 @@ export class HUD {
   _injectStyle() {
     const style = document.createElement("style");
     style.textContent = `
+:root { --hud-scale: 0.75; }
+
 /* ── Root overlay ─────────────────────────────────────── */
 #hud {
   position: fixed;
@@ -62,16 +144,16 @@ export class HUD {
 
 /* ── Outer glow wrapper ───────────────────────────────── */
 .hud-glow-wrap {
-  position: absolute;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%) scale(0.75);
-  transform-origin: bottom center;
+  position: fixed;
+  transform: scale(var(--hud-scale));
+  transform-origin: top left;
+  cursor: grab;
   pointer-events: auto;
   filter:
     drop-shadow(0 0 6px  rgba(0, 180, 255, 0.55))
     drop-shadow(0 0 22px rgba(0,  90, 220, 0.30));
 }
+.hud-glow-wrap.dragging { cursor: grabbing; }
 
 /* ── Main panel ───────────────────────────────────────── */
 .hud-panel {
@@ -420,9 +502,7 @@ export class HUD {
 
 /* ── Target info panel (top-right) ───────────────────── */
 .tgt-panel {
-  position: absolute;
-  top: 24px;
-  right: 24px;
+  position: fixed;
   width: 200px;
   background: rgba(0, 7, 22, 0.92);
   border: 1px solid rgba(255, 140, 0, 0.35);
@@ -432,14 +512,16 @@ export class HUD {
     0% 100%, 0% 14px
   );
   pointer-events: auto;
-  transform: scale(0.75);
-  transform-origin: top right;
+  transform: scale(var(--hud-scale));
+  transform-origin: top left;
+  cursor: grab;
   animation: tgt-panel-in 0.25s ease forwards;
   filter: drop-shadow(0 0 8px rgba(255, 120, 0, 0.35));
 }
+.tgt-panel.dragging { cursor: grabbing; }
 @keyframes tgt-panel-in {
-  from { opacity: 0; transform: translateX(16px) scale(0.75); }
-  to   { opacity: 1; transform: translateX(0)    scale(0.75); }
+  from { opacity: 0; transform: translateX(16px) scale(var(--hud-scale)); }
+  to   { opacity: 1; transform: translateX(0)    scale(var(--hud-scale)); }
 }
 .tgt-header {
   padding: 7px 12px 6px;
@@ -1343,6 +1425,17 @@ export class HUD {
     this._tgtPanel.style.animation = "";
     this._tgtPanel.style.display = "";
     this._tgtReticle.style.display = "";
+
+    // Lazy default position the first time the panel is shown (it starts
+    // display:none so its size isn't measurable until after this point).
+    if (!this._tgtPanelPositioned) {
+      requestAnimationFrame(() => {
+        const r = this._tgtPanel.getBoundingClientRect();
+        const x = window.innerWidth - r.width - 24;
+        this._setPanelPos(this._tgtPanel, x, 24);
+        this._tgtPanelPositioned = true;
+      });
+    }
   }
 
   clearTarget() {
