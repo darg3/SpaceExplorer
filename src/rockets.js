@@ -8,7 +8,7 @@ const DETONATE_DIST  = 18;    // world units — close enough = hit
 const MAX_ROCKETS    = 20;    // pool size
 const EXP_DURATION   = 0.55;  // seconds explosion lasts
 const EXP_PARTICLES  = 80;
-const TURN_RATE      = 3.5;   // homing slerp rate
+const TURN_RATE      = 8.0;   // homing slerp rate
 const TRAIL_COUNT    = 30;    // particles per rocket trail
 
 // ── Reusable temporaries ──────────────────────────────────────────────────────
@@ -23,6 +23,7 @@ class Rocket {
     this._scene = scene;
     this._life  = 0;
     this._target = null;
+    this._prevPos = new THREE.Vector3();
 
     // ── Mesh ─────────────────────────────────────────────────────────────────
     this.group = new THREE.Group();
@@ -80,6 +81,7 @@ class Rocket {
     this._life   = ROCKET_LIFE;
     this._target = targetMesh;
     this.group.position.copy(pos);
+    this._prevPos.copy(pos);
 
     // Aim initial orientation toward target
     targetMesh.getWorldPosition(_rktPos);
@@ -103,17 +105,28 @@ class Rocket {
     this._tPosAttr.needsUpdate = true;
   }
 
-  update(delta) {
+  update(delta, npcFleet) {
     if (!this.active) return;
 
     this._life -= delta;
     if (this._life <= 0) { this.deactivate(); return; }
 
+    this._prevPos.copy(this.group.position);
     this.group.updateMatrixWorld(true);
 
-    // ── Homing ───────────────────────────────────────────────────────────────
+    // ── Homing (lead pursuit) ────────────────────────────────────────────────
     if (this._target && this._target.parent) {
       this._target.getWorldPosition(_rktPos);
+
+      // Aim where the target will be at intercept time, not where it is now.
+      // Pure pursuit causes the rocket to orbit a laterally-moving target.
+      const npc = npcFleet?.shipForMesh(this._target);
+      if (npc?.velocity) {
+        const dist = this.group.position.distanceTo(_rktPos);
+        const tti  = dist / ROCKET_SPEED;
+        _rktPos.addScaledVector(npc.velocity, tti);
+      }
+
       _rktFwd.set(1, 0, 0).applyQuaternion(this.group.quaternion);
       _rktDir.subVectors(_rktPos, this.group.position).normalize();
 
@@ -272,6 +285,23 @@ class Explosion {
 
 // ── RocketManager (exported) ──────────────────────────────────────────────────
 const _detPos = new THREE.Vector3();
+const _segAB  = new THREE.Vector3();
+
+// Closest distance from segment AB to point P. Fast — no sqrt until the end.
+function _segPointDist(A, B, P) {
+  _segAB.subVectors(B, A);
+  const lenSq = _segAB.lengthSq();
+  if (lenSq < 1e-6) return P.distanceTo(A);
+  const t = THREE.MathUtils.clamp(
+    ((P.x - A.x) * _segAB.x + (P.y - A.y) * _segAB.y + (P.z - A.z) * _segAB.z) / lenSq,
+    0, 1,
+  );
+  return Math.sqrt(
+    (A.x + _segAB.x * t - P.x) ** 2 +
+    (A.y + _segAB.y * t - P.y) ** 2 +
+    (A.z + _segAB.z * t - P.z) ** 2,
+  );
+}
 
 export class RocketManager {
   constructor(scene) {
@@ -290,13 +320,13 @@ export class RocketManager {
   update(delta, npcFleet) {
     for (const rocket of this._rockets) {
       if (!rocket.active) continue;
-      rocket.update(delta);
+      rocket.update(delta, npcFleet);
       if (!rocket.active) continue;   // may have expired inside update
 
-      // ── Hit detection ─────────────────────────────────────────────────────
+      // ── Hit detection (swept — rocket moves ~13u/frame at 60fps, 18u sphere) ──
       if (rocket._target && rocket._target.parent) {
         rocket._target.getWorldPosition(_detPos);
-        const dist = rocket.group.position.distanceTo(_detPos);
+        const dist = _segPointDist(rocket._prevPos, rocket.group.position, _detPos);
         if (dist <= DETONATE_DIST) {
           this._detonate(rocket, npcFleet);
         }
