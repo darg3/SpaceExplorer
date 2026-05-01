@@ -9,6 +9,8 @@ import { RocketManager }  from './rockets.js';
 import { LootManager }    from './loot.js';
 import { Menu }           from './menu.js';
 import { MobileControls } from './mobile.js';
+import { Station }        from './station.js';
+import { Shop }           from './shop.js';
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 const canvas   = document.getElementById('game');
@@ -226,6 +228,16 @@ const stars = new Stars(scene);
 // ── World ─────────────────────────────────────────────────────────────────────
 const world = new World(scene);
 
+// ── Station ───────────────────────────────────────────────────────────────────
+// Single dockable station. Spire mesh is registered as a targetable so the
+// raycaster and right-click context menu can both pick it up.
+const station = new Station(scene, new THREE.Vector3(4500, -3500, 600));
+world.targetables.push(station.hitbox);
+world.namedTargetables.push(station.hitbox);
+
+const DOCK_RANGE = 300;
+let _docked = false;
+
 // ── Ship ──────────────────────────────────────────────────────────────────────
 const ship    = new Ship(scene, input);
 const hud     = new HUD(ship);
@@ -243,11 +255,11 @@ let score = 0;
 const loot = new LootManager(scene, ({ type }) => {
   if (_playerDead) return;
   if (type === 'shield') {
-    ship.shield = Math.min(100, ship.shield + 30);
+    ship.shield = Math.min(ship.maxShield, ship.shield + 30);
     score += 100;
     hud.showCombatMessage('+30 Shield  (+100 cr)');
   } else {
-    ship.hull = Math.min(100, ship.hull + 15);
+    ship.hull = Math.min(ship.maxHull, ship.hull + 15);
     score += 200;
     hud.showCombatMessage('+15 Hull  (+200 cr)');
   }
@@ -382,7 +394,7 @@ function stopMining(completed) {
 
 // ── Player damage handler (called when NPC rockets detonate on the ship) ─────
 function onPlayerHit(npcName, dmg) {
-  if (_playerDead) return;
+  if (_playerDead || _docked) return;
   ship.takeDamage(dmg);
   hud.flashDamage();
   hud.showCombatMessage(`${npcName} does ${dmg} damage to your ship`);
@@ -404,20 +416,53 @@ function killPlayer() {
 }
 
 // ── FIRE button callback ──────────────────────────────────────────────────────
-const PLAYER_ROCKET_DAMAGE = 25;
-
+// Damage and cooldown live on the ship — shop upgrades mutate them directly.
 hud.setFireCallback(() => {
-  if (_playerDead) return;
+  if (_playerDead || _docked) return;
   if (!currentTarget) return;
   const npc = fleet.shipForMesh(currentTarget);
   if (!npc || npc._state === 'dead') return;
   const [turretPos] = ship.getTurretPositions();
-  rockets.fire(turretPos, currentTarget, () => npc.takeDamage(PLAYER_ROCKET_DAMAGE));
-  hud.triggerFireCooldown(600);
+  const dmg = ship.weaponDamage;
+  rockets.fire(turretPos, currentTarget, () => npc.takeDamage(dmg));
+  hud.triggerFireCooldown(ship.weaponCooldownMs);
 });
 
 hud.setMineCallback(() => startMining());
 hud.setWarpCallback(() => doWarp());
+
+// ── Shop / Docking ────────────────────────────────────────────────────────────
+const shop = new Shop(
+  ship,
+  () => score,
+  n => { score = n; hud.setScore(n); },
+);
+
+function doDock() {
+  if (_playerDead || _docked) return;
+  if (currentTarget !== station.hitbox) return;
+  if (ship.position.distanceTo(station.position) > DOCK_RANGE) return;
+  _docked = true;
+  ship.engineOn = false;
+  ship.setTargetSpeed(0);
+  hud.showDockButton(false);
+  hud.showWarpButton(false);
+  hud.showMineButton(false);
+  shop.open(doUndock);
+}
+
+function doUndock() {
+  if (!_docked) return;
+  _docked = false;
+  // Push the ship away from the station so we don't immediately re-enter dock range.
+  const dir = ship.group.position.clone().sub(station.position);
+  if (dir.lengthSq() < 1) dir.set(1, 0, 0);
+  dir.normalize();
+  ship.group.position.addScaledVector(dir, 50);
+  ship.engineOn = true;
+}
+
+hud.setDockCallback(doDock);
 
 // ── Targeting ─────────────────────────────────────────────────────────────────
 // Click (not drag) on any world object to lock it as the current target.
@@ -471,10 +516,28 @@ canvas.addEventListener('contextmenu', e => {
   // Planets
   for (const mesh of world.namedTargetables) {
     if (mesh.userData.type === 'Asteroid Field') continue;
+    if (mesh.userData.isStation) continue;
     mesh.getWorldPosition(_tgtWorldPos);
     const dist = ship.position.distanceTo(_tgtWorldPos);
     items.push({
       category: 'Planet',
+      label:    mesh.userData.label,
+      subtype:  mesh.userData.type,
+      dist,
+      onSelect: () => {
+        currentTarget = mesh;
+        hud.setTarget(mesh.userData.label, mesh.userData.type, false);
+      },
+    });
+  }
+
+  // Stations
+  for (const mesh of world.namedTargetables) {
+    if (!mesh.userData.isStation) continue;
+    mesh.getWorldPosition(_tgtWorldPos);
+    const dist = ship.position.distanceTo(_tgtWorldPos);
+    items.push({
+      category: 'Station',
       label:    mesh.userData.label,
       subtype:  mesh.userData.type,
       dist,
@@ -613,11 +676,12 @@ function startGame() {
   ship.update(delta);
   hud.update();
   world.update(delta);
+  station.update(delta);
   elapsed += delta;
 
   // ── Asteroid collision damage ──────────────────────────────────────────
   _timeSinceHit += delta;
-  if (!_playerDead && ship.hull > 0 && _timeSinceHit > ASTEROID_HIT_COOLDOWN) {
+  if (!_playerDead && !_docked && ship.hull > 0 && _timeSinceHit > ASTEROID_HIT_COOLDOWN) {
     for (const ast of world.asteroids) {
       const r = ast.userData.radius ?? 20;
       if (ship.position.distanceTo(ast.position) < r + SHIP_COL_RADIUS) {
@@ -631,8 +695,8 @@ function startGame() {
   }
 
   // Shield regen after delay
-  if (!_playerDead && _timeSinceHit > SHIELD_REGEN_DELAY && ship.shield < 100) {
-    ship.shield = Math.min(100, ship.shield + SHIELD_REGEN_RATE * delta);
+  if (!_playerDead && _timeSinceHit > SHIELD_REGEN_DELAY && ship.shield < ship.maxShield) {
+    ship.shield = Math.min(ship.maxShield, ship.shield + SHIELD_REGEN_RATE * delta);
   }
 
   // Sync player health HUD every frame
@@ -692,9 +756,17 @@ function startGame() {
       _warpCooldown <= 0 && dist > WARP_MIN_DIST,
       currentTarget.userData.label,
     );
+
+    // Show Dock button only when targeting the station
+    if (currentTarget.userData.isStation && !_docked) {
+      hud.showDockButton(true, dist <= DOCK_RANGE);
+    } else {
+      hud.showDockButton(false);
+    }
   } else if (!_isMining) {
     hud.showMineButton(false, false);
     hud.showWarpButton(false);
+    hud.showDockButton(false);
   }
 
   // ── Mining beam update ─────────────────────────────────────────────────

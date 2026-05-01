@@ -15,7 +15,7 @@ python -m http.server 8080
 # VS Code: use the Live Server extension and click "Go Live"
 ```
 
-Then open `http://localh1ost:8080` in a modern browser (Chrome / Firefox / Edge).
+Then open `http://localhost:8080` in a modern browser (Chrome / Firefox / Edge).
 
 ---
 
@@ -63,8 +63,9 @@ Rotation controls work even when the engine is off.
 | **Fire Rockets**   | Fire at the locked enemy target (600 ms cooldown)             |
 | **Mine Asteroid**  | Mine the targeted rock when within 400 units                  |
 | **Warp To Target** | Warp to the target when it is > 600 units away (5 s cooldown) |
+| **Dock at Station**| Dock when the station is targeted and within 300 units        |
 
-Mine and Warp buttons appear only when their conditions are met.
+Mine, Warp, and Dock buttons appear only when their conditions are met.
 
 ---
 
@@ -176,6 +177,32 @@ Three large bodies at fixed positions:
 - Target name is displayed during the flash
 - 5-second cooldown before the next warp
 
+### Space Station & Upgrade Shop
+
+A single dockable station — **ARGOS STATION** — sits roughly 5 800 units from spawn. It appears in the right-click context menu under its own "Station" category.
+
+**Docking**
+
+- Target the station and fly within 300 units (warp gets you most of the way; fly the last gap)
+- The orange **Dock at Station** button appears when in range, or reads "Approach to Dock" when too far
+- Dock cuts the engine, halts the ship, and opens the shop overlay; combat damage is suspended while docked
+
+**Shop — session-only progression**
+
+Credits earned from looting are spent here. All upgrades and credits reset on page reload.
+
+| Upgrade            | Effect                       | Levels | Pricing                       |
+| ------------------ | ---------------------------- | ------ | ----------------------------- |
+| Hull Plating       | +25 max hull (and +25 hull)  | 5      | 500 / 1.5k / 4k / 9k / 20k    |
+| Shield Capacitor   | +25 max shield, fully charged| 5      | 500 / 1.5k / 4k / 9k / 20k    |
+| Engine Tuning      | +20 % cruise & boost speed   | 3      | 2k / 6k / 15k                 |
+| Warhead Yield      | +10 rocket damage            | 3      | 1.5k / 5k / 12k               |
+| Autoloader         | −100 ms fire cooldown        | 3      | 1.5k / 5k / 12k               |
+
+**Full Repair** — 300 cr, restores shield + armor + hull to maximum (one purchase per dock).
+
+**Undock** pushes the ship 50 units away from the station and re-enables the engine.
+
 ### HUD Overlay
 
 HTML/CSS overlay (no Three.js canvas involvement):
@@ -219,6 +246,9 @@ src/
   world.js          ← World class: asteroids and planets
   npcs.js           ← NPCFleet + NPCShip: enemy AI, health system
   rockets.js        ← RocketManager: projectile firing, travel, hit detection
+  loot.js           ← LootManager: loot orb pool, drops on NPC death, auto-pickup
+  station.js        ← Station class: ARGOS Station geometry, beacons, ring spin
+  shop.js           ← Shop class: upgrade definitions, overlay UI, purchase logic
 assets/
   nebula.jpg        ← (optional) NASA nebula image — see below
 ```

@@ -2,10 +2,11 @@ import * as THREE from 'three';
 
 // ── Tuning ────────────────────────────────────────────────────────────────────
 const CRUISE_SPEED        = 400;   // world units / second
-const MAX_SHIELD = 100;
-const MAX_ARMOR  = 100;
-const MAX_HULL   = 100;
 const BOOST_SPEED         = 1000;
+// Base stat caps. Per-instance maxShield/maxArmor/maxHull may grow via shop upgrades.
+const BASE_MAX_SHIELD     = 100;
+const BASE_MAX_ARMOR      = 100;
+const BASE_MAX_HULL       = 100;
 const PITCH_RATE          = 1.2;   // radians / second
 const YAW_RATE            = 1.2;
 const ROLL_RATE           = 1.8;
@@ -36,9 +37,16 @@ export class Ship {
     this.engineOn          = true;          // toggled by HUD buttons; false = no thrust, glow fades to 0
     this.targetSpeed       = CRUISE_SPEED;  // desired speed set by HUD bar (0–BOOST_SPEED)
     this.speed             = 0;             // lerped current speed (m/s), read by HUD each frame
-    this.shield            = MAX_SHIELD;
-    this.armor             = MAX_ARMOR;
-    this.hull              = MAX_HULL;
+    this.maxShield         = BASE_MAX_SHIELD;
+    this.maxArmor          = BASE_MAX_ARMOR;
+    this.maxHull           = BASE_MAX_HULL;
+    this.shield            = this.maxShield;
+    this.armor             = this.maxArmor;
+    this.hull              = this.maxHull;
+    // Shop-upgradeable multipliers / counters
+    this.speedMul          = 1;
+    this.weaponDamage      = 25;
+    this.weaponCooldownMs  = 600;
     this._emitAccum      = 0;
     this._nextParticle   = 0;
     this._dead           = false;
@@ -324,13 +332,13 @@ export class Ship {
 
     // ── Fly forward along local +X ────────────────────────────────────────
     if (this.engineOn) {
-      const speed = boost ? BOOST_SPEED : this.targetSpeed;
+      const speed = (boost ? BOOST_SPEED : this.targetSpeed) * this.speedMul;
       _fwd.set(1, 0, 0).applyQuaternion(this.group.quaternion);
       this.group.position.addScaledVector(_fwd, speed * delta);
     }
 
     // ── Lerped speed (for HUD readout) ───────────────────────────────────
-    const _targetSpeed = this.engineOn ? (boost ? BOOST_SPEED : this.targetSpeed) : 0;
+    const _targetSpeed = this.engineOn ? (boost ? BOOST_SPEED : this.targetSpeed) * this.speedMul : 0;
     this.speed = THREE.MathUtils.lerp(this.speed, _targetSpeed, Math.min(delta * 5, 1));
 
     // ── Thruster intensity ────────────────────────────────────────────────
