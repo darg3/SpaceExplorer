@@ -652,6 +652,12 @@ export class HUD {
 .warp-btn:hover::before { border-color: rgba(180, 100, 255, 0.7) !important; }
 .warp-btn.cooldown { opacity: 0.45; pointer-events: none; }
 
+/* ── DOCK button ──────────────────────────────────────── */
+.dock-btn { color: #ffcc44 !important; text-shadow: 0 0 10px rgba(255, 200, 80, 0.8) !important; }
+.dock-btn:hover { background: rgba(60, 40, 0, 0.98) !important; }
+.dock-btn:hover::before { border-color: rgba(255, 200, 80, 0.7) !important; }
+.dock-btn.disabled { opacity: 0.45; pointer-events: none; }
+
 /* ── MINE button ──────────────────────────────────────── */
 .mine-btn { color: #33ff99 !important; text-shadow: 0 0 10px rgba(50, 255, 150, 0.8) !important; }
 .mine-btn:hover { background: rgba(0, 40, 20, 0.98) !important; }
@@ -1053,6 +1059,13 @@ export class HUD {
             </div>
           </div>
 
+          <div id="dock-btn-row" style="display:none">
+            <div class="hud-sep"></div>
+            <div class="hud-buttons">
+              <button id="btn-dock" class="dock-btn">&#9678; Dock at Station</button>
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -1109,6 +1122,8 @@ export class HUD {
     this._mineBtn       = this._el.querySelector("#btn-mine");
     this._warpBtnRow    = this._el.querySelector("#warp-btn-row");
     this._warpBtn       = this._el.querySelector("#btn-warp");
+    this._dockBtnRow    = this._el.querySelector("#dock-btn-row");
+    this._dockBtn       = this._el.querySelector("#btn-dock");
     this._speedFill     = this._el.querySelector("#spd-fill");
     this._speedNum      = this._el.querySelector("#spd-num");
     this._speedTrack    = this._el.querySelector(".hud-speed-track");
@@ -1152,6 +1167,7 @@ export class HUD {
     this._onFire = null; // set by main.js via setFireCallback()
     this._onMine = null; // set by main.js via setMineCallback()
     this._onWarp = null; // set by main.js via setWarpCallback()
+    this._onDock = null; // set by main.js via setDockCallback()
     this._ctxMenu = null; // currently open context menu DOM node
 
     this._thrusterBtn.addEventListener("mousedown", (e) => {
@@ -1205,6 +1221,10 @@ export class HUD {
     this._warpBtn.addEventListener("mousedown", (e) => {
       e.stopPropagation();
       if (this._onWarp) this._onWarp();
+    });
+    this._dockBtn.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+      if (this._onDock) this._onDock();
     });
   }
 
@@ -1377,6 +1397,20 @@ export class HUD {
   showWarpButton(show, label = "Target") {
     this._warpBtnRow.style.display = show ? "" : "none";
     if (show) this._warpBtn.innerHTML = `&#9889; Warp To ${label}`;
+  }
+
+  // ── Dock API ──────────────────────────────────────────────────────────────
+
+  setDockCallback(fn) { this._onDock = fn; }
+
+  showDockButton(show, inRange = true) {
+    this._dockBtnRow.style.display = show ? "" : "none";
+    if (show) {
+      this._dockBtn.classList.toggle("disabled", !inRange);
+      this._dockBtn.innerHTML = inRange
+        ? "&#9678; Dock at Station"
+        : "&#9678; Approach to Dock";
+    }
   }
 
   // ── Combat log ────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ python -m http.server 8080
 # VS Code: use the Live Server extension and click "Go Live"
 ```
 
-Then open `http://localh1ost:8080` in a modern browser (Chrome / Firefox / Edge).
+Then open `http://localhost:8080` in a modern browser (Chrome / Firefox / Edge).
 
 ---
 
