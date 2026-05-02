@@ -730,6 +730,100 @@ export class HUD {
   color: #ff9955;
 }
 
+/* ── Weapon loadout strip ─────────────────────────────── */
+.weap-strip {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.weap-slot {
+  flex: 1;
+  position: relative;
+  padding: 6px 4px 5px;
+  background: rgba(0, 18, 40, 0.85);
+  border: 1px solid rgba(0, 160, 255, 0.22);
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  clip-path: polygon(
+    8px 0%, calc(100% - 8px) 0%,
+    100% 8px, 100% calc(100% - 8px),
+    calc(100% - 8px) 100%, 8px 100%,
+    0% calc(100% - 8px), 0% 8px
+  );
+  transition: background 0.15s, border-color 0.15s;
+}
+.weap-slot:hover {
+  background: rgba(0, 40, 80, 0.95);
+  border-color: rgba(0, 220, 255, 0.5);
+}
+.weap-slot.active {
+  background: rgba(60, 20, 0, 0.9);
+  border-color: rgba(255, 140, 60, 0.7);
+  box-shadow: 0 0 10px rgba(255, 120, 30, 0.45);
+}
+.weap-slot.active .weap-name {
+  color: #ff9955;
+  text-shadow: 0 0 8px rgba(255, 120, 30, 0.85);
+}
+.weap-key {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: rgba(140, 200, 255, 0.55);
+  font-weight: bold;
+}
+.weap-slot.active .weap-key {
+  color: #ffaa66;
+}
+.weap-name {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: #00cfff;
+  text-shadow: 0 0 6px rgba(0, 200, 255, 0.55);
+  text-transform: uppercase;
+}
+.weap-ammo {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: #69f0ae;
+  text-shadow: 0 0 4px rgba(105, 240, 174, 0.6);
+}
+.weap-ammo.empty {
+  color: #ff5555;
+  text-shadow: 0 0 6px rgba(255, 80, 80, 0.7);
+}
+@keyframes weap-ammo-flash {
+  0%, 100% { transform: scale(1); }
+  40%      { transform: scale(1.25); color: #ff3333; }
+}
+.weap-ammo.flash { animation: weap-ammo-flash 0.4s ease; }
+.weap-charge {
+  width: 100%;
+  height: 4px;
+  background: rgba(0, 180, 255, 0.06);
+  border: 1px solid rgba(0, 160, 255, 0.18);
+  margin-top: 1px;
+  overflow: hidden;
+}
+.weap-charge-fill {
+  height: 100%;
+  width: 0%;
+  background-image: repeating-linear-gradient(
+    90deg, #cc88ff 0px, #cc88ff 6px, transparent 6px, transparent 8px
+  );
+  filter: drop-shadow(0 0 3px #cc88ff);
+  transition: width 0.05s linear;
+}
+.weap-charge-fill.full {
+  background-image: repeating-linear-gradient(
+    90deg, #ffccff 0px, #ffccff 6px, transparent 6px, transparent 8px
+  );
+  filter: drop-shadow(0 0 5px #ffaaff);
+}
+
 /* ── Warp flash overlay ───────────────────────────────── */
 #warp-flash {
   position: fixed;
@@ -1292,8 +1386,25 @@ export class HUD {
 
           <div class="hud-sep"></div>
 
+          <div class="weap-strip">
+            <div class="weap-slot" data-idx="1">
+              <span class="weap-key">[1]</span>
+              <span class="weap-name">Laser</span>
+            </div>
+            <div class="weap-slot" data-idx="2">
+              <span class="weap-key">[2]</span>
+              <span class="weap-name">Missile</span>
+              <span class="weap-ammo" id="weap-ammo">12/12</span>
+            </div>
+            <div class="weap-slot" data-idx="3">
+              <span class="weap-key">[3]</span>
+              <span class="weap-name">Plasma</span>
+              <div class="weap-charge"><div class="weap-charge-fill" id="weap-charge-fill"></div></div>
+            </div>
+          </div>
+
           <div class="hud-buttons">
-            <button id="btn-fire" class="fire-btn">&#9650; Fire Rockets<span id="fire-cooldown-num" style="display:none"></span></button>
+            <button id="btn-fire" class="fire-btn">&#9650; Fire Laser<span id="fire-cooldown-num" style="display:none"></span></button>
           </div>
 
           <div id="mine-btn-row" style="display:none">
@@ -1400,6 +1511,11 @@ export class HUD {
     this._orbHulNum = this._el.querySelector("#orb-hul-num");
     this._scoreNum  = this._el.querySelector("#hud-score-num");
 
+    // Weapon strip
+    this._weapSlots      = Array.from(this._el.querySelectorAll(".weap-slot"));
+    this._weapAmmo       = this._el.querySelector("#weap-ammo");
+    this._weapChargeFill = this._el.querySelector("#weap-charge-fill");
+
     // Initialize arcs at full health
     _setArc(this._orbShdArc, 100, 78);
     _setArc(this._orbArmArc, 100, 64);
@@ -1415,7 +1531,9 @@ export class HUD {
   // ── Button events ─────────────────────────────────────────────────────────
 
   _bindButtons() {
-    this._onFire = null; // set by main.js via setFireCallback()
+    this._onFirePress    = null; // set by main.js via setFirePressCallback()
+    this._onFireRelease  = null; // set by main.js via setFireReleaseCallback()
+    this._onWeaponSelect = null; // set by main.js via setWeaponSelectCallback()
     this._onMine = null; // set by main.js via setMineCallback()
     this._onWarp = null; // set by main.js via setWarpCallback()
     this._onDock = null; // set by main.js via setDockCallback()
@@ -1461,10 +1579,29 @@ export class HUD {
       dragging = false;
     });
 
+    // Fire button: split mousedown/mouseup so plasma can charge-and-release.
+    // mouseleave also releases so a drag-off the button doesn't strand a charge.
     this._fireBtn.addEventListener("mousedown", (e) => {
       e.stopPropagation();
-      if (this._onFire) this._onFire();
+      if (this._onFirePress) this._onFirePress();
     });
+    this._fireBtn.addEventListener("mouseup", (e) => {
+      e.stopPropagation();
+      if (this._onFireRelease) this._onFireRelease();
+    });
+    this._fireBtn.addEventListener("mouseleave", () => {
+      if (this._onFireRelease) this._onFireRelease();
+    });
+
+    // Weapon slot click → switch active weapon
+    for (const slot of this._weapSlots) {
+      slot.addEventListener("mousedown", (e) => {
+        e.stopPropagation();
+        const idx = parseInt(slot.dataset.idx, 10);
+        if (this._onWeaponSelect) this._onWeaponSelect(idx);
+      });
+    }
+
     this._mineBtn.addEventListener("mousedown", (e) => {
       e.stopPropagation();
       if (this._onMine) this._onMine();
@@ -1561,7 +1698,41 @@ export class HUD {
 
   // ── Combat API ────────────────────────────────────────────────────────────
 
-  setFireCallback(fn) { this._onFire = fn; }
+  setFirePressCallback(fn)    { this._onFirePress = fn; }
+  setFireReleaseCallback(fn)  { this._onFireRelease = fn; }
+  setWeaponSelectCallback(fn) { this._onWeaponSelect = fn; }
+
+  // Highlight the active weapon slot and re-label the fire button.
+  setActiveWeapon(idx) {
+    const labels = { 1: "&#9650; Fire Laser", 2: "&#9650; Fire Missile", 3: "&#9650; Fire Plasma" };
+    for (const slot of this._weapSlots) {
+      slot.classList.toggle("active", parseInt(slot.dataset.idx, 10) === idx);
+    }
+    const cooldownSpan = '<span id="fire-cooldown-num" style="display:none"></span>';
+    this._fireBtn.innerHTML = (labels[idx] || labels[1]) + cooldownSpan;
+    this._fireCooldownNum = this._el.querySelector("#fire-cooldown-num");
+  }
+
+  setMissileAmmo(n, max) {
+    if (!this._weapAmmo) return;
+    this._weapAmmo.textContent = `${n}/${max}`;
+    this._weapAmmo.classList.toggle("empty", n <= 0);
+  }
+
+  // Quick attention-flash on the missile counter (e.g. when out of ammo).
+  flashMissileAmmo() {
+    if (!this._weapAmmo) return;
+    this._weapAmmo.classList.remove("flash");
+    void this._weapAmmo.offsetWidth;
+    this._weapAmmo.classList.add("flash");
+  }
+
+  setPlasmaCharge(pct) {
+    if (!this._weapChargeFill) return;
+    const p = Math.max(0, Math.min(1, pct));
+    this._weapChargeFill.style.width = (p * 100).toFixed(1) + "%";
+    this._weapChargeFill.classList.toggle("full", p >= 1);
+  }
 
   triggerFireCooldown(ms = 600) {
     this._fireBtn.classList.add("cooldown");

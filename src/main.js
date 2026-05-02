@@ -6,6 +6,7 @@ import { World }        from './world.js';
 import { HUD }          from './hud.js';
 import { NPCFleet }     from './npcs.js';
 import { RocketManager }  from './rockets.js';
+import { WeaponSystem }   from './weapons.js';
 import { LootManager }    from './loot.js';
 import { Menu }           from './menu.js';
 import { MobileControls } from './mobile.js';
@@ -415,18 +416,21 @@ function killPlayer() {
   hud.showGameOver(() => location.reload());
 }
 
-// ── FIRE button callback ──────────────────────────────────────────────────────
-// Damage and cooldown live on the ship — shop upgrades mutate them directly.
-hud.setFireCallback(() => {
-  if (_playerDead || _docked) return;
-  if (!currentTarget) return;
-  const npc = fleet.shipForMesh(currentTarget);
-  if (!npc || npc._state === 'dead') return;
-  const [turretPos] = ship.getTurretPositions();
-  const dmg = ship.weaponDamage;
-  rockets.fire(turretPos, currentTarget, () => npc.takeDamage(dmg));
-  hud.triggerFireCooldown(ship.weaponCooldownMs);
-});
+// ── Weapon system ─────────────────────────────────────────────────────────────
+// Slot 1 = Laser (forward bolts, no lock), 2 = Missile (rebadged rockets, ammo
+// gated), 3 = Plasma (hold-to-charge). Damage & cooldown for missiles still
+// live on the ship — shop upgrades mutate them directly.
+const weapons = new WeaponSystem(
+  scene, ship, hud,
+  () => currentTarget,
+  fleet, rockets,
+  () => _playerDead,
+  () => _docked,
+);
+
+hud.setFirePressCallback(()    => weapons.pressFire());
+hud.setFireReleaseCallback(()  => weapons.releaseFire());
+hud.setWeaponSelectCallback(n  => weapons.setSlot(n));
 
 hud.setMineCallback(() => startMining());
 hud.setWarpCallback(() => doWarp());
@@ -445,6 +449,10 @@ function doDock() {
   _docked = true;
   ship.engineOn = false;
   ship.setTargetSpeed(0);
+  // Free missile reload on dock
+  ship.missileAmmo = ship.missileAmmoMax;
+  hud.setMissileAmmo(ship.missileAmmo, ship.missileAmmoMax);
+  weapons.cancelCharge();
   hud.showDockButton(false);
   hud.showWarpButton(false);
   hud.showMineButton(false);
@@ -599,6 +607,23 @@ document.addEventListener('mousedown', e => {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') hud.hideContextMenu();
+  // Space-bar fire (in addition to the HUD button). Skip when typing in any
+  // form control so the shop / future inputs aren't hijacked. e.repeat blocks
+  // OS-level auto-repeat from re-triggering pressFire each tick.
+  if (e.code === 'Space' && !e.repeat) {
+    const tag = e.target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON') return;
+    e.preventDefault();
+    weapons.pressFire();
+  }
+});
+
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space') {
+    const tag = e.target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'BUTTON') return;
+    weapons.releaseFire();
+  }
 });
 
 // ── Camera ────────────────────────────────────────────────────────────────────
@@ -673,6 +698,7 @@ function startGame() {
 
   const delta = Math.min(clock.getDelta(), 0.05);
 
+  weapons.handleInput(input);
   ship.update(delta);
   hud.update();
   world.update(delta);
@@ -704,6 +730,7 @@ function startGame() {
   hud.setHullWarning(ship.hull < 20);
   fleet.update(delta, ship.position, elapsed);
   rockets.update(delta, fleet);
+  weapons.update(delta, fleet);
   loot.update(delta, ship.position);
   stars.update(ship.position);
   _warpCooldown = Math.max(0, _warpCooldown - delta);
@@ -794,6 +821,7 @@ function startGame() {
   }
 
   renderer.render(scene, camera);
+  input.tick();   // snapshot keys for next-frame edge-trigger detection
   }());
 }
 

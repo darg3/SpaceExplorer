@@ -47,6 +47,11 @@ export class Ship {
     this.speedMul          = 1;
     this.weaponDamage      = 25;
     this.weaponCooldownMs  = 600;
+    // Weapon loadout: 1=Laser, 2=Missile (homing rockets), 3=Plasma (charged)
+    this.currentWeapon     = 1;
+    this.missileAmmoMax    = 12;
+    this.missileAmmo       = 12;
+    this.laserDamage       = 6;
     this._emitAccum      = 0;
     this._nextParticle   = 0;
     this._dead           = false;
