@@ -1,14 +1,17 @@
 import * as THREE from 'three';
 
 // ── Tuning ────────────────────────────────────────────────────────────────────
-// Laser: fast straight bolts, no target lock, low damage, short cooldown.
+// Laser: fast straight bolts, low damage, short cooldown. Lead-aims and
+// homes on the locked NPC target if one is set; else flies forward.
 const LASER_SPEED        = 2400;
 const LASER_LIFE         = 0.5;
 const LASER_HIT_DIST     = 18;
 const LASER_COOLDOWN_MS  = 140;
 const MAX_LASER_BOLTS    = 16;
+const LASER_TURN_RATE    = 14.0;      // rad/s — high; bolts shouldn't curve much
 
 // Plasma: hold-to-charge, release fires; damage and orb size scale with charge.
+// Same target-lock auto-aim & homing as laser, but gentler turn rate.
 const PLASMA_SPEED       = 600;
 const PLASMA_LIFE        = 3.0;
 const PLASMA_CHARGE_TIME = 1.5;       // seconds to reach full charge
@@ -17,10 +20,12 @@ const PLASMA_COOLDOWN_MS = 800;
 const MAX_PLASMA_ORBS    = 4;
 const PLASMA_BASE_DMG    = 30;
 const PLASMA_BONUS_DMG   = 90;        // damage = BASE + BONUS * charge
+const PLASMA_TURN_RATE   = 4.0;       // rad/s — lazy curve toward target
 
 // ── Reusable temporaries (avoid GC) ───────────────────────────────────────────
 const _tmpFwd = new THREE.Vector3();
 const _tmpPos = new THREE.Vector3();
+const _tmpDir = new THREE.Vector3();
 const _segAB  = new THREE.Vector3();
 
 // Closest distance from segment AB to point P. Mirrors rockets.js helper —
@@ -45,8 +50,9 @@ class LaserBolt {
   constructor(scene) {
     this._scene = scene;
     this._life  = 0;
-    this._prevPos = new THREE.Vector3();
-    this._dir     = new THREE.Vector3();
+    this._prevPos    = new THREE.Vector3();
+    this._dir        = new THREE.Vector3();
+    this._targetMesh = null;
 
     const geo = new THREE.CylinderGeometry(0.55, 0.55, 14, 8);
     geo.rotateZ(-Math.PI / 2);   // align cylinder along +X
@@ -67,8 +73,9 @@ class LaserBolt {
 
   get active() { return this._life > 0; }
 
-  activate(pos, dirNormalized) {
+  activate(pos, dirNormalized, targetMesh = null) {
     this._life = LASER_LIFE;
+    this._targetMesh = targetMesh;
     this.mesh.position.copy(pos);
     this._prevPos.copy(pos);
     this._dir.copy(dirNormalized);
@@ -80,14 +87,35 @@ class LaserBolt {
 
   deactivate() {
     this._life = 0;
+    this._targetMesh = null;
     this.mesh.visible = false;
     this._light.intensity = 0;
   }
 
-  update(delta) {
+  update(delta, fleet) {
     if (!this.active) return;
     this._life -= delta;
     if (this._life <= 0) { this.deactivate(); return; }
+
+    // In-flight homing: lerp the direction vector toward a lead-aimed target.
+    // lerp + normalize approximates a slerp on the unit sphere — adequate for
+    // the small per-frame correction we apply.
+    if (this._targetMesh?.parent) {
+      this._targetMesh.getWorldPosition(_tmpPos);
+      const npc = fleet?.shipForMesh?.(this._targetMesh);
+      if (npc?.velocity) {
+        const dist = this.mesh.position.distanceTo(_tmpPos);
+        _tmpPos.addScaledVector(npc.velocity, dist / LASER_SPEED);
+      }
+      _tmpDir.subVectors(_tmpPos, this.mesh.position);
+      if (_tmpDir.lengthSq() > 1e-6) {
+        _tmpDir.normalize();
+        const turn = Math.min(delta * LASER_TURN_RATE, 1);
+        this._dir.lerp(_tmpDir, turn).normalize();
+        this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), this._dir);
+      }
+    }
+
     this._prevPos.copy(this.mesh.position);
     this.mesh.position.addScaledVector(this._dir, LASER_SPEED * delta);
     this._light.position.copy(this.mesh.position);
@@ -109,18 +137,18 @@ export class LaserManager {
     this._turretAlt = 0;
   }
 
-  fire(turretPositions, dirNormalized) {
+  fire(turretPositions, dirNormalized, targetMesh = null) {
     const bolt = this._bolts.find(b => !b.active);
     if (!bolt) return;
     const pos = turretPositions[this._turretAlt % turretPositions.length];
     this._turretAlt = (this._turretAlt + 1) % turretPositions.length;
-    bolt.activate(pos, dirNormalized);
+    bolt.activate(pos, dirNormalized, targetMesh);
   }
 
   update(delta, fleet, damage) {
     for (const bolt of this._bolts) {
       if (!bolt.active) continue;
-      bolt.update(delta);
+      bolt.update(delta, fleet);
       if (!bolt.active) continue;
 
       for (const npc of fleet.ships) {
@@ -144,8 +172,9 @@ class PlasmaOrb {
   constructor(scene) {
     this._scene = scene;
     this._life = 0;
-    this._prevPos = new THREE.Vector3();
-    this._dir     = new THREE.Vector3();
+    this._prevPos    = new THREE.Vector3();
+    this._dir        = new THREE.Vector3();
+    this._targetMesh = null;
     this._charge  = 0;
     this.damage   = 0;
     this.hitDist  = 4;
@@ -179,8 +208,9 @@ class PlasmaOrb {
 
   get active() { return this._life > 0; }
 
-  activate(pos, dirNormalized, charge) {
+  activate(pos, dirNormalized, charge, targetMesh = null) {
     this._life   = PLASMA_LIFE;
+    this._targetMesh = targetMesh;
     this._charge = charge;
     this.damage  = PLASMA_BASE_DMG + PLASMA_BONUS_DMG * charge;
 
@@ -207,15 +237,33 @@ class PlasmaOrb {
 
   deactivate() {
     this._life = 0;
+    this._targetMesh = null;
     this.mesh.visible  = false;
     this._halo.visible = false;
     this._light.intensity = 0;
   }
 
-  update(delta) {
+  update(delta, fleet) {
     if (!this.active) return;
     this._life -= delta;
     if (this._life <= 0) { this.deactivate(); return; }
+
+    // In-flight homing toward locked NPC, with lead pursuit
+    if (this._targetMesh?.parent) {
+      this._targetMesh.getWorldPosition(_tmpPos);
+      const npc = fleet?.shipForMesh?.(this._targetMesh);
+      if (npc?.velocity) {
+        const dist = this.mesh.position.distanceTo(_tmpPos);
+        _tmpPos.addScaledVector(npc.velocity, dist / PLASMA_SPEED);
+      }
+      _tmpDir.subVectors(_tmpPos, this.mesh.position);
+      if (_tmpDir.lengthSq() > 1e-6) {
+        _tmpDir.normalize();
+        const turn = Math.min(delta * PLASMA_TURN_RATE, 1);
+        this._dir.lerp(_tmpDir, turn).normalize();
+      }
+    }
+
     this._prevPos.copy(this.mesh.position);
     this.mesh.position.addScaledVector(this._dir, PLASMA_SPEED * delta);
     this._halo.position.copy(this.mesh.position);
@@ -245,16 +293,16 @@ export class PlasmaManager {
     this._rockets = rocketManager;   // borrow its explosion pool on hit
   }
 
-  fire(turretPositions, dirNormalized, charge) {
+  fire(turretPositions, dirNormalized, charge, targetMesh = null) {
     const orb = this._orbs.find(o => !o.active);
     if (!orb) return;
-    orb.activate(turretPositions[0], dirNormalized, charge);
+    orb.activate(turretPositions[0], dirNormalized, charge, targetMesh);
   }
 
   update(delta, fleet) {
     for (const orb of this._orbs) {
       if (!orb.active) continue;
-      orb.update(delta);
+      orb.update(delta, fleet);
       if (!orb.active) continue;
 
       for (const npc of fleet.ships) {
@@ -359,12 +407,41 @@ export class WeaponSystem {
   }
 
   // ── Internal fire helpers ─────────────────────────────────────────────────
+
+  // Resolve the locked target into a homing-eligible NPC mesh + npc record.
+  // Returns { mesh, npc } when a hostile is locked & alive, else null. Stations
+  // and asteroids are skipped — homing toward them would just dump shots into
+  // unhittable geometry.
+  _resolveHomingTarget() {
+    const target = this._getTarget?.();
+    if (!target) return null;
+    const npc = this._fleet?.shipForMesh?.(target);
+    if (!npc || npc._state === 'dead') return null;
+    return { mesh: target, npc };
+  }
+
+  // Compute initial fire direction. If homing target is supplied, lead-aim to
+  // where the target will be at intercept time; else use ship-forward.
+  _aimDir(muzzlePos, projSpeed, homing) {
+    if (homing) {
+      homing.mesh.getWorldPosition(_tmpPos);
+      if (homing.npc.velocity) {
+        const dist = muzzlePos.distanceTo(_tmpPos);
+        _tmpPos.addScaledVector(homing.npc.velocity, dist / projSpeed);
+      }
+      _tmpDir.subVectors(_tmpPos, muzzlePos);
+      if (_tmpDir.lengthSq() > 1e-6) return _tmpDir.normalize();
+    }
+    return _tmpFwd.set(1, 0, 0).applyQuaternion(this._ship.quaternion);
+  }
+
   _tryFireLaser() {
     if (this._laserCooldown > 0) return;
     if (this._isDead() || this._isDocked()) return;
     const turrets = this._ship.getTurretPositions();
-    _tmpFwd.set(1, 0, 0).applyQuaternion(this._ship.quaternion);
-    this._lasers.fire(turrets, _tmpFwd);
+    const homing  = this._resolveHomingTarget();
+    const dir     = this._aimDir(turrets[0], LASER_SPEED, homing);
+    this._lasers.fire(turrets, dir, homing?.mesh ?? null);
     this._laserCooldown = LASER_COOLDOWN_MS;
   }
 
@@ -391,8 +468,9 @@ export class WeaponSystem {
 
   _firePlasma(charge) {
     const turrets = this._ship.getTurretPositions();
-    _tmpFwd.set(1, 0, 0).applyQuaternion(this._ship.quaternion);
-    this._plasma.fire(turrets, _tmpFwd, charge);
+    const homing  = this._resolveHomingTarget();
+    const dir     = this._aimDir(turrets[0], PLASMA_SPEED, homing);
+    this._plasma.fire(turrets, dir, charge, homing?.mesh ?? null);
     this._hud.triggerFireCooldown(PLASMA_COOLDOWN_MS);
   }
 
