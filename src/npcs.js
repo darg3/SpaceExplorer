@@ -20,6 +20,10 @@ const _fromAxis = new THREE.Vector3(1, 0, 0);  // ship local forward = +X
 const _worldUp  = new THREE.Vector3(0, 0, 1);  // world up for orbit tangent
 const _tmpPos   = new THREE.Vector3();
 const _muzzleWp = new THREE.Vector3();
+const _perp     = new THREE.Vector3();   // orbit-state strafe direction
+const _spawnWp  = new THREE.Vector3();   // particle spawn world position
+const _spawnBack = new THREE.Vector3();   // particle backward direction
+const _spawnJit  = new THREE.Vector3();   // particle jitter
 
 // ── Colour variants ───────────────────────────────────────────────────────────
 const VARIANTS = [
@@ -251,21 +255,19 @@ class NPCShip {
     const engLocal = this._enginePositions[
       Math.floor(Math.random() * this._enginePositions.length)
     ];
-    const worldPos = engLocal.clone().applyMatrix4(this.group.matrixWorld);
+    _spawnWp.copy(engLocal).applyMatrix4(this.group.matrixWorld);
 
-    this._pPositions[i * 3]     = worldPos.x;
-    this._pPositions[i * 3 + 1] = worldPos.y;
-    this._pPositions[i * 3 + 2] = worldPos.z;
+    this._pPositions[i * 3]     = _spawnWp.x;
+    this._pPositions[i * 3 + 1] = _spawnWp.y;
+    this._pPositions[i * 3 + 2] = _spawnWp.z;
 
-    const backward = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.group.quaternion);
-    const speed    = 90 + Math.random() * 70;
+    _spawnBack.set(-1, 0, 0).applyQuaternion(this.group.quaternion);
+    const speed = 90 + Math.random() * 70;
+    _spawnJit.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
     this._pVelocities[i]
-      .copy(backward)
+      .copy(_spawnBack)
       .multiplyScalar(speed)
-      .addScaledVector(
-        new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5),
-        25,
-      );
+      .addScaledVector(_spawnJit, 25);
     this._pLife[i] = this._pMaxLife[i];
   }
 
@@ -309,8 +311,8 @@ class NPCShip {
       this.group.quaternion.slerp(_targetQ, Math.min(delta * TURN_RATE, 1));
 
       // Strafe tangentially (perpendicular to dir-to-player in the XY plane)
-      const perp = _dir.clone().cross(_worldUp).normalize();
-      this.group.position.addScaledVector(perp, ORBIT_SPEED * delta);
+      _perp.copy(_dir).cross(_worldUp).normalize();
+      this.group.position.addScaledVector(_perp, ORBIT_SPEED * delta);
 
       // If orbit drift brings the ship too close, nudge outward
       const newDist = this.group.position.distanceTo(playerPos);

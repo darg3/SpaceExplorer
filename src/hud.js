@@ -3,8 +3,17 @@
 // Update a bar-row's fill width and percentage text. Used by enemy bars only;
 // player health now drives the orb arcs (see _setArc).
 function _setBar(row, pct) {
-  row.querySelector(".bar-fill").style.width = pct + "%";
-  row.querySelector(".bar-pct").textContent = Math.round(pct) + "%";
+  // Cache child element refs on first call to avoid querySelector every frame
+  if (!row._fillEl) {
+    row._fillEl = row.querySelector(".bar-fill");
+    row._pctEl  = row.querySelector(".bar-pct");
+  }
+  // Memoize on rounded pct — sub-percent fluctuations aren't visible
+  const r = Math.round(pct);
+  if (row._lastPct === r) return;
+  row._lastPct = r;
+  row._fillEl.style.width = r + "%";
+  row._pctEl.textContent  = r + "%";
 }
 
 // Set an SVG <circle>'s stroke-dasharray so it renders an arc covering pct%
@@ -1648,6 +1657,9 @@ export class HUD {
     this._tgtPanel.style.display = "none";
     this._tgtReticle.style.display = "none";
     this._enemyBars.style.display = "none";
+    this._lastOnScreen = null;
+    this._lastSx = this._lastSy = null;
+    this._lastDistStr = null;
   }
 
   // distUnits — raw world-unit distance from ship to target.
@@ -1658,13 +1670,24 @@ export class HUD {
     if (distUnits < 1000) distStr = `${Math.round(distUnits)} km`;
     else if (distUnits < 1e6) distStr = `${(distUnits / 1000).toFixed(1)} Mm`;
     else distStr = `${(distUnits / 1e6).toFixed(2)} Gm`;
-    this._tgtDist.textContent = distStr;
+    if (this._lastDistStr !== distStr) {
+      this._lastDistStr = distStr;
+      this._tgtDist.textContent = distStr;
+    }
 
     if (onScreen) {
-      this._tgtReticle.style.display = "";
-      this._tgtReticle.style.left = `${screenX}px`;
-      this._tgtReticle.style.top = `${screenY}px`;
-    } else {
+      if (this._lastOnScreen !== true) {
+        this._lastOnScreen = true;
+        this._tgtReticle.style.display = "";
+      }
+      // Round to integer pixels — sub-pixel jitter isn't visible and avoids
+      // template-string allocs every frame
+      const sx = Math.round(screenX);
+      const sy = Math.round(screenY);
+      if (this._lastSx !== sx) { this._lastSx = sx; this._tgtReticle.style.left = sx + "px"; }
+      if (this._lastSy !== sy) { this._lastSy = sy; this._tgtReticle.style.top  = sy + "px"; }
+    } else if (this._lastOnScreen !== false) {
+      this._lastOnScreen = false;
       this._tgtReticle.style.display = "none";
     }
   }
@@ -1675,13 +1698,23 @@ export class HUD {
   // HUD "breathes" faster as the ship accelerates.
   update() {
     const s = this._ship.speed;
-    const pct = Math.min(s / 1000, 1) * 100;
+    const sRounded = Math.round(s);
+    const pctTenths = Math.round(Math.min(s / 1000, 1) * 1000);   // 0..1000 (tenths of a %)
     const isBoosting = s > 405;
 
-    this._speedFill.style.width = pct.toFixed(1) + "%";
-    this._speedFill.classList.toggle("boost", isBoosting);
-    this._speedNum.innerHTML = Math.round(s) + " <small>m/s</small>";
-    this._speedNum.classList.toggle("boost", isBoosting);
+    if (this._lastPctTenths !== pctTenths) {
+      this._lastPctTenths = pctTenths;
+      this._speedFill.style.width = (pctTenths / 10) + "%";
+    }
+    if (this._lastBoost !== isBoosting) {
+      this._lastBoost = isBoosting;
+      this._speedFill.classList.toggle("boost", isBoosting);
+      this._speedNum.classList.toggle("boost", isBoosting);
+    }
+    if (this._lastSpeedNum !== sRounded) {
+      this._lastSpeedNum = sRounded;
+      this._speedNum.innerHTML = sRounded + " <small>m/s</small>";
+    }
 
     // Drive the orb core via a manual sine wave so changing pulse rate
     // doesn't cause the CSS animation to restart and stutter.
@@ -1689,11 +1722,18 @@ export class HUD {
     const speedFrac = Math.min(s / 1000, 1);
     const pulseHz = 0.5 + speedFrac * 2.5;
     const pulse = 0.5 + 0.5 * Math.sin(t * pulseHz * Math.PI * 2);
-    const scale = 1 + 0.08 * pulse;
-    const glow = 18 + 18 * pulse;
-    this._orbCore.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)})`;
-    this._orbCore.style.boxShadow =
-      `0 0 ${glow.toFixed(1)}px rgba(0, 229, 255, 0.85), inset 0 0 16px rgba(255,255,255,0.3)`;
+    // Quantize to reduce style writes — eye can't see sub-step changes
+    const scaleQ = Math.round((1 + 0.08 * pulse) * 200);   // 200..216 ish
+    const glowQ  = Math.round(18 + 18 * pulse);            // 18..36
+    if (this._lastOrbScale !== scaleQ) {
+      this._lastOrbScale = scaleQ;
+      this._orbCore.style.transform = `translate(-50%, -50%) scale(${(scaleQ / 200).toFixed(3)})`;
+    }
+    if (this._lastOrbGlow !== glowQ) {
+      this._lastOrbGlow = glowQ;
+      this._orbCore.style.boxShadow =
+        `0 0 ${glowQ}px rgba(0, 229, 255, 0.85), inset 0 0 16px rgba(255,255,255,0.3)`;
+    }
   }
 
   // ── Combat API ────────────────────────────────────────────────────────────

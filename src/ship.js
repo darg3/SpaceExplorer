@@ -23,6 +23,9 @@ const _rollQ  = new THREE.Quaternion();
 const _AX     = new THREE.Vector3(1, 0, 0);
 const _AY     = new THREE.Vector3(0, 1, 0);
 const _AZ     = new THREE.Vector3(0, 0, 1);
+const _spawnWp   = new THREE.Vector3();   // particle spawn world position
+const _spawnBack = new THREE.Vector3();   // particle backward direction
+const _spawnJit  = new THREE.Vector3();   // particle jitter
 
 // ── Materials ─────────────────────────────────────────────────────────────────
 const mkStd = (color, emissive = 0x000000, metalness = 0.75, roughness = 0.25) =>
@@ -270,21 +273,19 @@ export class Ship {
     const i = this._nextParticle++ % PARTICLE_COUNT;
 
     const engLocal = this._enginePositions[Math.floor(Math.random() * this._enginePositions.length)];
-    const worldPos = engLocal.clone().applyMatrix4(this.group.matrixWorld);
+    _spawnWp.copy(engLocal).applyMatrix4(this.group.matrixWorld);
 
-    this._pPositions[i * 3]     = worldPos.x;
-    this._pPositions[i * 3 + 1] = worldPos.y;
-    this._pPositions[i * 3 + 2] = worldPos.z;
+    this._pPositions[i * 3]     = _spawnWp.x;
+    this._pPositions[i * 3 + 1] = _spawnWp.y;
+    this._pPositions[i * 3 + 2] = _spawnWp.z;
 
-    const backward = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.group.quaternion);
-    const speed    = 90 + Math.random() * 70;
+    _spawnBack.set(-1, 0, 0).applyQuaternion(this.group.quaternion);
+    const speed = 90 + Math.random() * 70;
+    _spawnJit.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
     this._pVelocities[i]
-      .copy(backward)
+      .copy(_spawnBack)
       .multiplyScalar(speed)
-      .addScaledVector(
-        new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5),
-        25,
-      );
+      .addScaledVector(_spawnJit, 25);
 
     this._pLife[i] = this._pMaxLife[i];
   }
