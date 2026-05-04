@@ -12,6 +12,7 @@ import { Menu }           from './menu.js';
 import { MobileControls } from './mobile.js';
 import { Station }        from './station.js';
 import { Shop }           from './shop.js';
+import { Minimap }        from './minimap.js';
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 const canvas   = document.getElementById('game');
@@ -242,6 +243,7 @@ let _docked = false;
 // ── Ship ──────────────────────────────────────────────────────────────────────
 const ship    = new Ship(scene, input);
 const hud     = new HUD(ship);
+const minimap = new Minimap();
 const rockets = new RocketManager(scene);
 
 // Player death state — set when hull reaches 0. Gates input-driven actions
@@ -349,19 +351,25 @@ function _createBeam() {
   return { inner, outer, innerMat, outerMat, light };
 }
 
+const _beamDir = new THREE.Vector3();
+const _beamMid = new THREE.Vector3();
+const _beamQ   = new THREE.Quaternion();
+const _beamUp  = new THREE.Vector3(0, 1, 0);
+
 function _positionBeam(beam, start, end) {
-  const dir = new THREE.Vector3().subVectors(end, start);
-  const len = dir.length();
-  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-  const q   = new THREE.Quaternion().setFromUnitVectors(
-    new THREE.Vector3(0, 1, 0), dir.normalize(),
-  );
-  for (const m of [beam.inner, beam.outer]) {
-    m.position.copy(mid);
-    m.scale.set(1, len, 1);
-    m.quaternion.copy(q);
-    m.visible = true;
-  }
+  _beamDir.subVectors(end, start);
+  const len = _beamDir.length();
+  _beamMid.addVectors(start, end).multiplyScalar(0.5);
+  _beamDir.normalize();
+  _beamQ.setFromUnitVectors(_beamUp, _beamDir);
+  beam.inner.position.copy(_beamMid);
+  beam.inner.scale.set(1, len, 1);
+  beam.inner.quaternion.copy(_beamQ);
+  beam.inner.visible = true;
+  beam.outer.position.copy(_beamMid);
+  beam.outer.scale.set(1, len, 1);
+  beam.outer.quaternion.copy(_beamQ);
+  beam.outer.visible = true;
   beam.light.position.copy(end);
 }
 
@@ -478,6 +486,7 @@ hud.setDockCallback(doDock);
 const raycaster    = new THREE.Raycaster();
 const _mouse       = new THREE.Vector2();
 const _tgtWorldPos = new THREE.Vector3();
+const _tgtProj     = new THREE.Vector3();   // reused for camera.project per frame
 let   currentTarget  = null;
 let   _clickStartX   = 0;
 let   _clickStartY   = 0;
@@ -701,6 +710,7 @@ function startGame() {
   weapons.handleInput(input);
   ship.update(delta);
   hud.update();
+  minimap.update({ ship, fleet, world, loot, station, currentTarget, delta });
   world.update(delta);
   station.update(delta);
   elapsed += delta;
@@ -759,10 +769,10 @@ function startGame() {
     const dist = ship.position.distanceTo(_tgtWorldPos);
 
     // Project world position → normalised device coords → screen pixels
-    const proj = _tgtWorldPos.clone().project(camera);
-    const sx = ( proj.x * 0.5 + 0.5) * window.innerWidth;
-    const sy = (-proj.y * 0.5 + 0.5) * window.innerHeight;
-    hud.updateTarget(dist, sx, sy, proj.z < 1.0);
+    _tgtProj.copy(_tgtWorldPos).project(camera);
+    const sx = ( _tgtProj.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-_tgtProj.y * 0.5 + 0.5) * window.innerHeight;
+    hud.updateTarget(dist, sx, sy, _tgtProj.z < 1.0);
 
     // Update enemy health bars when targeting an NPC ship
     const npc = fleet.shipForMesh(currentTarget);

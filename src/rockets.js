@@ -15,6 +15,10 @@ const _rktDir    = new THREE.Vector3();
 const _rktTargQ  = new THREE.Quaternion();
 const _rktFwd    = new THREE.Vector3();
 const _rktPos    = new THREE.Vector3();
+const _rktTrlTail = new THREE.Vector3();
+const _rktTrlBack = new THREE.Vector3();
+const _rktTrlJit  = new THREE.Vector3();
+const _rktSlerpQ  = new THREE.Quaternion();
 
 // ── Rocket (internal) ─────────────────────────────────────────────────────────
 class Rocket {
@@ -136,10 +140,8 @@ class Rocket {
       const dot = _rktFwd.dot(_rktDir);
       if (dot < 0.9999) {
         _rktTargQ.setFromUnitVectors(_rktFwd, _rktDir);
-        this.group.quaternion.slerp(
-          this.group.quaternion.clone().premultiply(_rktTargQ),
-          Math.min(delta * TURN_RATE, 1),
-        );
+        _rktSlerpQ.copy(this.group.quaternion).premultiply(_rktTargQ);
+        this.group.quaternion.slerp(_rktSlerpQ, Math.min(delta * TURN_RATE, 1));
       }
     }
 
@@ -169,21 +171,19 @@ class Rocket {
   _spawnTrailParticle() {
     const i = this._tNext++ % TRAIL_COUNT;
     // Spawn at rocket tail (local -X)
-    const tail = new THREE.Vector3(-8, 0, 0).applyMatrix4(this.group.matrixWorld);
-    this._tPositions[i * 3]     = tail.x;
-    this._tPositions[i * 3 + 1] = tail.y;
-    this._tPositions[i * 3 + 2] = tail.z;
+    _rktTrlTail.set(-8, 0, 0).applyMatrix4(this.group.matrixWorld);
+    this._tPositions[i * 3]     = _rktTrlTail.x;
+    this._tPositions[i * 3 + 1] = _rktTrlTail.y;
+    this._tPositions[i * 3 + 2] = _rktTrlTail.z;
 
     // Velocity: mostly backward + small spread
-    const back = new THREE.Vector3(-1, 0, 0).applyQuaternion(this.group.quaternion);
+    _rktTrlBack.set(-1, 0, 0).applyQuaternion(this.group.quaternion);
     const speed = 40 + Math.random() * 40;
+    _rktTrlJit.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);
     this._tVelocities[i]
-      .copy(back)
+      .copy(_rktTrlBack)
       .multiplyScalar(speed)
-      .addScaledVector(
-        new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5),
-        15,
-      );
+      .addScaledVector(_rktTrlJit, 15);
     this._tLife[i] = this._tMaxLife[i];
   }
 
