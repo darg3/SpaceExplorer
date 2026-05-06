@@ -545,6 +545,86 @@ export class HUD {
   text-align: right;
 }
 
+/* ── Wave panel (top-center) ──────────────────────────── */
+.hud-wave-panel {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  padding: 7px 16px;
+  background: rgba(22, 4, 7, 0.92);
+  border: 1px solid rgba(255, 80, 80, 0.4);
+  clip-path: polygon(
+    12px 0%, 100% 0%,
+    100% calc(100% - 12px), calc(100% - 12px) 100%,
+    0% 100%, 0% 12px
+  );
+  pointer-events: none;
+  transform: translateX(-50%) scale(var(--hud-scale));
+  transform-origin: top center;
+  filter: drop-shadow(0 0 6px rgba(255, 80, 80, 0.45));
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: 'Courier New', monospace;
+  transition: border-color 0.3s ease, filter 0.3s ease;
+}
+.hud-wave-panel.flash {
+  border-color: rgba(255, 200, 60, 0.95);
+  filter: drop-shadow(0 0 14px rgba(255, 180, 40, 0.9));
+}
+.hud-wave-label {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: rgba(255, 120, 120, 0.8);
+}
+.hud-wave-num {
+  font-size: 18px;
+  font-weight: bold;
+  color: #ff8866;
+  text-shadow: 0 0 6px #ff5533;
+  min-width: 22px;
+  text-align: center;
+}
+.hud-wave-enemies {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: rgba(255, 180, 140, 0.85);
+  border-left: 1px solid rgba(255, 80, 80, 0.3);
+  padding-left: 10px;
+}
+
+/* ── Wave banner (center-screen) ──────────────────────── */
+#wave-banner {
+  position: fixed;
+  top: 32%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.85);
+  pointer-events: none;
+  z-index: 70;
+  font-family: 'Courier New', monospace;
+  font-size: 36px;
+  font-weight: bold;
+  letter-spacing: 0.25em;
+  color: #ffcc66;
+  text-shadow:
+    0 0 12px rgba(255, 160, 40, 0.95),
+    0 0 28px rgba(255, 80, 0, 0.7);
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.25s ease-out, transform 0.45s cubic-bezier(0.18, 0.9, 0.3, 1.2);
+}
+#wave-banner.show {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+#wave-banner.boss {
+  color: #ff66cc;
+  text-shadow:
+    0 0 14px rgba(255, 80, 200, 0.95),
+    0 0 32px rgba(220, 0, 160, 0.75);
+}
+
 /* ── Target info panel (top-right) ───────────────────── */
 .tgt-panel {
   position: fixed;
@@ -1303,6 +1383,13 @@ export class HUD {
         <span class="hud-score-num" id="hud-score-num">0</span>
       </div>
 
+      <!-- Wave indicator — top-center, persistent -->
+      <div class="hud-wave-panel" id="hud-wave">
+        <span class="hud-wave-label">WAVE</span>
+        <span class="hud-wave-num" id="hud-wave-num">--</span>
+        <span class="hud-wave-enemies" id="hud-wave-enemies">--</span>
+      </div>
+
       <!-- Target info panel — top-right, hidden until a target is locked -->
       <div class="tgt-panel" id="tgt-panel" style="display:none">
         <div class="tgt-header">
@@ -1469,6 +1556,13 @@ export class HUD {
     this._combatLog      = combatLog;
     this._combatLogTimer = null;
 
+    // Wave banner — large fading text for "WAVE N" / "WAVE N CLEARED" / boss alert
+    const waveBanner = document.createElement("div");
+    waveBanner.id = "wave-banner";
+    document.body.appendChild(waveBanner);
+    this._waveBanner      = waveBanner;
+    this._waveBannerTimer = null;
+
     // Game-over overlay — shown when the player ship is destroyed
     const gameOver = document.createElement("div");
     gameOver.id = "game-over";
@@ -1519,6 +1613,9 @@ export class HUD {
     this._orbArmNum = this._el.querySelector("#orb-arm-num");
     this._orbHulNum = this._el.querySelector("#orb-hul-num");
     this._scoreNum  = this._el.querySelector("#hud-score-num");
+    this._wavePanel    = this._el.querySelector("#hud-wave");
+    this._waveNum      = this._el.querySelector("#hud-wave-num");
+    this._waveEnemies  = this._el.querySelector("#hud-wave-enemies");
 
     // Weapon strip
     this._weapSlots      = Array.from(this._el.querySelectorAll(".weap-slot"));
@@ -1535,6 +1632,35 @@ export class HUD {
 
   setScore(n) {
     this._scoreNum.textContent = String(n);
+  }
+
+  // ── Waves ─────────────────────────────────────────────────────────────────
+
+  setWave(n) {
+    this._waveNum.textContent = n > 0 ? String(n) : "--";
+    if (n > 0) {
+      this._wavePanel.classList.remove("flash");
+      // Force reflow so the class re-add re-triggers the transition
+      void this._wavePanel.offsetWidth;
+      this._wavePanel.classList.add("flash");
+      setTimeout(() => this._wavePanel.classList.remove("flash"), 600);
+    }
+  }
+
+  setEnemiesRemaining(n) {
+    this._waveEnemies.textContent = n === 1 ? "1 hostile" : `${n} hostiles`;
+  }
+
+  showWaveBanner(text) {
+    const isBoss = /boss/i.test(text);
+    this._waveBanner.textContent = text;
+    this._waveBanner.classList.toggle("boss", isBoss);
+    this._waveBanner.classList.add("show");
+    if (this._waveBannerTimer) clearTimeout(this._waveBannerTimer);
+    this._waveBannerTimer = setTimeout(
+      () => this._waveBanner.classList.remove("show"),
+      2200,
+    );
   }
 
   // ── Button events ─────────────────────────────────────────────────────────

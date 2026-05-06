@@ -1,16 +1,10 @@
 import * as THREE from 'three';
 
-// ── Tuning ────────────────────────────────────────────────────────────────────
-const APPROACH_SPEED = 250;   // m/s — slower than player cruise (400)
-const APPROACH_DELAY = 10;    // seconds before NPCs start moving toward player
-const MIN_DIST       = 220;   // units — transition to orbit within this range
-const ORBIT_SPEED    = 180;   // units/s tangential speed while circling player
+// ── Tuning (shared across all archetypes) ────────────────────────────────────
 const NPC_PARTICLES  = 200;   // particle pool per ship
 const EMIT_RATE      = 55;    // particles/sec at full thruster intensity
 const TURN_RATE      = 2.0;   // slerp rate for orientation tracking
-const FIRE_COOLDOWN_MIN = 2.5;// seconds between NPC shots (lower bound)
-const FIRE_COOLDOWN_MAX = 4.5;// seconds between NPC shots (upper bound)
-const FIRE_RANGE        = 700;// units — only fire when player is within range
+const WRECK_DESPAWN  = 30;    // seconds a wreck lingers before disposal
 
 // ── Reusable temporaries (sequential per-frame updates — no concurrency) ──────
 const _fwd      = new THREE.Vector3();
@@ -25,57 +19,120 @@ const _spawnWp  = new THREE.Vector3();   // particle spawn world position
 const _spawnBack = new THREE.Vector3();   // particle backward direction
 const _spawnJit  = new THREE.Vector3();   // particle jitter
 
-// ── Colour variants ───────────────────────────────────────────────────────────
-const VARIANTS = [
-  {
-    name:     'HUNTER-1',
-    body:     0x992222, dark:    0x1a0808, accent:  0xff4422,
-    glass:    0xff2200, glassEm: 0x330808, particle: 0xff4400,
-    light1:   0xff2200, light2:  0xff4400,
-  },
-  {
-    name:     'HUNTER-2',
-    body:     0x1f6633, dark:    0x081a0e, accent:  0x33ff88,
-    glass:    0x00cc66, glassEm: 0x082211, particle: 0x33ff66,
-    light1:   0x00ff44, light2:  0x22ff66,
-  },
-  {
-    name:     'HUNTER-3',
-    body:     0x776622, dark:    0x1a1508, accent:  0xffcc33,
-    glass:    0xffaa00, glassEm: 0x221a08, particle: 0xffaa22,
-    light1:   0xff8800, light2:  0xffaa00,
-  },
-];
+// ── Archetypes ────────────────────────────────────────────────────────────────
+// Each archetype is the full per-type spec: visuals, hull silhouette, stats,
+// AI tuning, weapon cadence. Wave difficulty is layered on at construction
+// via a multiplier object {hp, dmg}.
 
-// ── Per-variant hull proportions ──────────────────────────────────────────────
-// Small tweaks to silhouette so each ship reads differently at a glance.
-const HULL_PROPS = [
-  { fusTipR: 6,  fusBaseR: 14, wingSpan: 36, noseH: 34 }, // HUNTER-1: lean
-  { fusTipR: 8,  fusBaseR: 18, wingSpan: 42, noseH: 38 }, // HUNTER-2: bulky
-  { fusTipR: 7,  fusBaseR: 15, wingSpan: 34, noseH: 44 }, // HUNTER-3: long nose
-];
-
-// ── Spawn positions — spread around player start (origin) ─────────────────────
-const SPAWN_POSITIONS = [
-  new THREE.Vector3( 700,  450,  120),
-  new THREE.Vector3(-550,  650, -100),
-  new THREE.Vector3( 250, -700,  200),
-];
+export const ARCHETYPES = {
+  scout: {
+    name: 'SCOUT',
+    type: 'Hostile Scout',
+    scale: 0.78,
+    shield: 50, armor: 50, hull: 50,
+    approachSpeed: 320, orbitSpeed: 230, minDist: 200,
+    fireCooldownMin: 1.4, fireCooldownMax: 2.6,
+    fireRange: 720, fireDamage: 2,
+    burstCount: 1, burstSpacing: 0,
+    isBoss: false,
+    variant: {
+      body: 0x992222, dark: 0x1a0808, accent: 0xff4422,
+      glass: 0xff2200, glassEm: 0x330808, particle: 0xff4400,
+      light1: 0xff2200, light2: 0xff4400,
+    },
+    hullProps: { fusTipR: 5, fusBaseR: 12, wingSpan: 32, noseH: 32 },
+  },
+  heavy: {
+    name: 'HEAVY',
+    type: 'Hostile Heavy',
+    scale: 1.15,
+    shield: 160, armor: 160, hull: 160,
+    approachSpeed: 200, orbitSpeed: 140, minDist: 260,
+    fireCooldownMin: 3.0, fireCooldownMax: 5.0,
+    fireRange: 800, fireDamage: 6,
+    burstCount: 1, burstSpacing: 0,
+    isBoss: false,
+    variant: {
+      body: 0x1f6633, dark: 0x081a0e, accent: 0x33ff88,
+      glass: 0x00cc66, glassEm: 0x082211, particle: 0x33ff66,
+      light1: 0x00ff44, light2: 0x22ff66,
+    },
+    hullProps: { fusTipR: 9, fusBaseR: 20, wingSpan: 46, noseH: 40 },
+  },
+  boss: {
+    name: 'DREADNOUGHT',
+    type: 'Hostile Boss',
+    scale: 2.2,
+    shield: 600, armor: 600, hull: 600,
+    approachSpeed: 160, orbitSpeed: 120, minDist: 360,
+    fireCooldownMin: 2.5, fireCooldownMax: 3.5,
+    fireRange: 1100, fireDamage: 5,
+    burstCount: 3, burstSpacing: 0.12,
+    isBoss: true,
+    variant: {
+      body: 0x551166, dark: 0x110318, accent: 0xff44cc,
+      glass: 0xff22aa, glassEm: 0x330522, particle: 0xff66dd,
+      light1: 0xff22aa, light2: 0xff88ee,
+    },
+    hullProps: { fusTipR: 11, fusBaseR: 26, wingSpan: 60, noseH: 56 },
+  },
+};
 
 // ── Material helper ───────────────────────────────────────────────────────────
 const mkStd = (color, emissive = 0x000000, metalness = 0.75, roughness = 0.25) =>
   new THREE.MeshStandardMaterial({ color, emissive, metalness, roughness });
 
+// ── Per-archetype shared resources ────────────────────────────────────────────
+// Hull materials are identical across every ship of the same archetype, so we
+// build them once and reuse. This eliminates per-spawn allocation churn AND
+// keeps Three.js's shader-program cache hot — only the FIRST ship of an
+// archetype triggers a shader compile (and even that is moved to startup by
+// NPCFleet.prewarm). Nozzle materials stay per-ship because their opacity is
+// animated independently per ship's thruster intensity.
+const _archResources = new WeakMap();
+
+function _getArchResources(arch) {
+  let r = _archResources.get(arch);
+  if (r) return r;
+  const v = arch.variant;
+  r = {
+    materials: {
+      body:   mkStd(v.body, 0x000000, 0.8, 0.2),
+      dark:   mkStd(v.dark, 0x000000, 0.9, 0.15),
+      accent: mkStd(v.accent, v.accent >> 1, 0.5, 0.3),
+      glass:  new THREE.MeshStandardMaterial({
+        color: v.glass, emissive: v.glassEm, emissiveIntensity: 0.6,
+        metalness: 0.1, roughness: 0.0, transparent: true, opacity: 0.82,
+      }),
+      particle: new THREE.PointsMaterial({
+        color: v.particle, size: 5, sizeAttenuation: true,
+        blending: THREE.AdditiveBlending, transparent: true, opacity: 0.85,
+        depthWrite: false,
+      }),
+    },
+  };
+  _archResources.set(arch, r);
+  return r;
+}
+
+// Single global hitbox material — invisible, no per-ship state, never mutated.
+const _SHARED_HITBOX_MAT = new THREE.MeshBasicMaterial({ visible: false });
+
 // ── NPCShip (internal) ────────────────────────────────────────────────────────
 class NPCShip {
-  constructor(scene, variant, spawnPos, hullProps, onDeath = null, onShoot = null) {
+  constructor(scene, archetype, spawnPos, mult, label, onDeath = null, onShoot = null) {
     this._scene   = scene;
     this._onDeath = onDeath;
     this._onShoot = onShoot;
-    this._name    = variant.name;
+    this._arch    = archetype;
+    this._name    = label;
+
+    const v = archetype.variant;
+    const p = archetype.hullProps;
 
     this.group = new THREE.Group();
     this.group.position.copy(spawnPos);
+    this.group.scale.setScalar(archetype.scale);
     // Slight random yaw so they don't all face the same direction at spawn
     this.group.rotation.z = (Math.random() - 0.5) * 0.5;
 
@@ -83,37 +140,46 @@ class NPCShip {
     this._thrusterIntensity = 0.15;
     this._emitAccum         = 0;
     this._nextParticle      = 0;
+    this._deadAge           = 0;
+    this._disposable        = false;
+    this._burstQueue        = 0;     // remaining shots in current burst
+    this._burstTimer        = 0;     // delay until next shot in burst
 
-    // Stagger initial fire timer so the three hunters don't volley in lockstep
+    // Stagger initial fire timer so co-spawned ships don't volley in lockstep
     this._fireCooldown = 1.5 + Math.random() * 2.5;
     // Local muzzle offset, just past the nose tip (nose center at x=45 + noseH/2)
-    this._muzzleLocal = new THREE.Vector3(45 + hullProps.noseH + 6, 0, 0);
+    this._muzzleLocal = new THREE.Vector3(45 + p.noseH + 6, 0, 0);
 
     this._prevPos = this.group.position.clone();
     this.velocity = new THREE.Vector3();   // world-space u/s, sampled per frame
 
-    // Health — shield absorbs first, then armor, then hull
-    this.shield = 100;
-    this.armor  = 100;
-    this.hull   = 100;
+    // Health — shield absorbs first, then armor, then hull. Per-wave HP scaling.
+    const hp = mult?.hp ?? 1;
+    this.shield = archetype.shield * hp;
+    this.armor  = archetype.armor  * hp;
+    this.hull   = archetype.hull   * hp;
+    this.maxShield = this.shield;
+    this.maxArmor  = this.armor;
+    this.maxHull   = this.hull;
 
-    this._buildHull(variant, hullProps);
-    this._buildThrusters(variant);
-    this._buildParticleTrail(variant);
+    // Per-ship rocket damage (read by main.js when forwarding the fire callback)
+    this.dmg = archetype.fireDamage * (mult?.dmg ?? 1);
+
+    this._buildHull(archetype, v, p);
+    this._buildThrusters(v);
+    this._buildParticleTrail(archetype);
 
     scene.add(this.group);
   }
 
   // ── Hull ──────────────────────────────────────────────────────────────────
 
-  _buildHull(v, p) {
-    const body   = mkStd(v.body,   0x000000, 0.8, 0.2);
-    const dark   = mkStd(v.dark,   0x000000, 0.9, 0.15);
-    const accent = mkStd(v.accent, v.accent >> 1, 0.5, 0.3);
-    const glass  = new THREE.MeshStandardMaterial({
-      color: v.glass, emissive: v.glassEm, emissiveIntensity: 0.6,
-      metalness: 0.1, roughness: 0.0, transparent: true, opacity: 0.82,
-    });
+  _buildHull(arch, v, p) {
+    const M = _getArchResources(arch).materials;
+    const body   = M.body;
+    const dark   = M.dark;
+    const accent = M.accent;
+    const glass  = M.glass;
 
     // Fuselage — visible hull mesh (no longer the targetable proxy)
     const fuselage = new THREE.Mesh(
@@ -124,13 +190,13 @@ class NPCShip {
     this.fuselage = fuselage;
 
     // Invisible hitbox — generous click radius around the ship so the player
-    // can lock on without precision-aiming at the fuselage. Sized to enclose
-    // wings and nose cone with a comfortable margin.
+    // can lock on without precision-aiming. Boss gets a fatter hitbox.
+    const hitR = arch.isBoss ? 130 : 95;
     const hitbox = new THREE.Mesh(
-      new THREE.SphereGeometry(95, 8, 6),
-      new THREE.MeshBasicMaterial({ visible: false }),
+      new THREE.SphereGeometry(hitR, 8, 6),
+      _SHARED_HITBOX_MAT,
     );
-    hitbox.userData = { targetable: true, label: v.name, type: 'Hostile Fighter' };
+    hitbox.userData = { targetable: true, label: this._name, type: arch.type };
     this.group.add(hitbox);
     this.hitbox = hitbox;  // exposed for NPCFleet.targetables
 
@@ -187,6 +253,16 @@ class NPCShip {
       strip.position.set(0, zOff * 25, zOff > 0 ? 6 : -6);
       this.group.add(strip);
     });
+
+    // Boss-only crown ring — visually distinguishes the dreadnought silhouette.
+    if (arch.isBoss) {
+      const crown = new THREE.Mesh(
+        new THREE.TorusGeometry(28, 2.4, 12, 36), accent,
+      );
+      crown.rotation.y = Math.PI / 2;
+      crown.position.set(8, 0, 0);
+      this.group.add(crown);
+    }
   }
 
   // ── Thruster glow ─────────────────────────────────────────────────────────
@@ -224,7 +300,7 @@ class NPCShip {
 
   // ── Particle trail ────────────────────────────────────────────────────────
 
-  _buildParticleTrail(v) {
+  _buildParticleTrail(arch) {
     this._pPositions  = new Float32Array(NPC_PARTICLES * 3);
     this._pVelocities = Array.from({ length: NPC_PARTICLES }, () => new THREE.Vector3());
     this._pLife       = new Float32Array(NPC_PARTICLES);
@@ -238,15 +314,9 @@ class NPCShip {
     this._pPosAttr = new THREE.BufferAttribute(this._pPositions, 3);
     geo.setAttribute('position', this._pPosAttr);
 
-    this._particleMesh = new THREE.Points(geo, new THREE.PointsMaterial({
-      color:           v.particle,
-      size:            5,
-      sizeAttenuation: true,
-      blending:        THREE.AdditiveBlending,
-      transparent:     true,
-      opacity:         0.85,
-      depthWrite:      false,
-    }));
+    // Particle material is shared per archetype — same color/size/blending for
+    // every ship of the type, no per-ship state animated on it.
+    this._particleMesh = new THREE.Points(geo, _getArchResources(arch).materials.particle);
     this._scene.add(this._particleMesh);
   }
 
@@ -271,37 +341,56 @@ class NPCShip {
     this._pLife[i] = this._pMaxLife[i];
   }
 
+  _fireOnce() {
+    _muzzleWp.copy(this._muzzleLocal).applyMatrix4(this.group.matrixWorld);
+    this._onShoot(_muzzleWp.clone(), this._name, this.dmg);
+  }
+
   // ── Update (called every frame) ───────────────────────────────────────────
 
-  update(delta, playerPos, elapsed) {
+  update(delta, playerPos) {
     if (this._state === 'dead') {
       // Wrecks drift at their last velocity (with friction) — no tumble
       this.group.position.addScaledVector(this._driftVel, delta);
       this._driftVel.multiplyScalar(Math.max(0, 1 - delta * 0.4));
+
+      // Fade hull then mark for disposal once the timer expires
+      this._deadAge += delta;
+      if (this._deadAge > WRECK_DESPAWN - 2) {
+        const t = Math.max(0, (WRECK_DESPAWN - this._deadAge) / 2);
+        this.group.traverse(obj => {
+          if (!obj.isMesh) return;
+          if (obj.material && 'opacity' in obj.material) {
+            obj.material.transparent = true;
+            obj.material.opacity = t;
+          }
+        });
+      }
+      if (this._deadAge >= WRECK_DESPAWN) this._disposable = true;
       return;
     }
 
     this.group.updateMatrixWorld(true);
 
-    // State transitions
-    if (elapsed >= APPROACH_DELAY && this._state === 'idle') {
-      this._state = 'approaching';
-    }
-
+    const arch = this._arch;
     const dist = this.group.position.distanceTo(playerPos);
     let targetIntensity;
 
-    if (this._state === 'approaching' && dist > MIN_DIST) {
+    // State transitions: scouts/heavies/bosses all start engaging immediately
+    // — the WaveManager owns spawn-time pacing now, no global APPROACH_DELAY.
+    if (this._state === 'idle') this._state = 'approaching';
+
+    if (this._state === 'approaching' && dist > arch.minDist) {
       // Smoothly rotate to face the player then advance
       _dir.subVectors(playerPos, this.group.position).normalize();
       _targetQ.setFromUnitVectors(_fromAxis, _dir);
       this.group.quaternion.slerp(_targetQ, Math.min(delta * TURN_RATE, 1));
 
       _fwd.set(1, 0, 0).applyQuaternion(this.group.quaternion);
-      this.group.position.addScaledVector(_fwd, APPROACH_SPEED * delta);
+      this.group.position.addScaledVector(_fwd, arch.approachSpeed * delta);
 
       targetIntensity = 0.55;
-    } else if (this._state === 'approaching' && dist <= MIN_DIST) {
+    } else if (this._state === 'approaching' && dist <= arch.minDist) {
       this._state = 'orbiting';
       targetIntensity = 0.45;
     } else if (this._state === 'orbiting') {
@@ -312,31 +401,44 @@ class NPCShip {
 
       // Strafe tangentially (perpendicular to dir-to-player in the XY plane)
       _perp.copy(_dir).cross(_worldUp).normalize();
-      this.group.position.addScaledVector(_perp, ORBIT_SPEED * delta);
+      this.group.position.addScaledVector(_perp, arch.orbitSpeed * delta);
 
       // If orbit drift brings the ship too close, nudge outward
       const newDist = this.group.position.distanceTo(playerPos);
-      if (newDist < MIN_DIST * 0.85) {
+      if (newDist < arch.minDist * 0.85) {
         _dir.subVectors(this.group.position, playerPos).normalize();
         this.group.position.addScaledVector(_dir, 80 * delta);
       }
 
       targetIntensity = 0.45;
     } else {
-      // Idle — faint glow only
       targetIntensity = 0.15;
     }
 
     // ── Fire rockets at the player while engaged ──────────────────────────
     if (this._onShoot && this._state !== 'idle') {
-      this._fireCooldown -= delta;
-      if (this._fireCooldown <= 0) {
-        if (dist <= FIRE_RANGE) {
-          _muzzleWp.copy(this._muzzleLocal).applyMatrix4(this.group.matrixWorld);
-          this._onShoot(_muzzleWp.clone(), this._name);
+      // In-burst follow-up shots take priority over the cooldown clock
+      if (this._burstQueue > 0) {
+        this._burstTimer -= delta;
+        if (this._burstTimer <= 0 && dist <= arch.fireRange) {
+          this._fireOnce();
+          this._burstQueue -= 1;
+          this._burstTimer = arch.burstSpacing;
         }
-        this._fireCooldown =
-          FIRE_COOLDOWN_MIN + Math.random() * (FIRE_COOLDOWN_MAX - FIRE_COOLDOWN_MIN);
+      } else {
+        this._fireCooldown -= delta;
+        if (this._fireCooldown <= 0) {
+          if (dist <= arch.fireRange) {
+            this._fireOnce();
+            // Queue the rest of the burst (boss-only typically)
+            if (arch.burstCount > 1) {
+              this._burstQueue = arch.burstCount - 1;
+              this._burstTimer = arch.burstSpacing;
+            }
+          }
+          this._fireCooldown =
+            arch.fireCooldownMin + Math.random() * (arch.fireCooldownMax - arch.fireCooldownMin);
+        }
       }
     }
 
@@ -407,7 +509,7 @@ class NPCShip {
 
     // Trigger blast at ship's last world position
     this.group.getWorldPosition(_tmpPos);
-    this._onDeath?.(_tmpPos);
+    this._onDeath?.(_tmpPos, this._arch);
 
     // Kill alive-only visual elements
     this._thrusterLight.intensity = 0;
@@ -416,15 +518,21 @@ class NPCShip {
       inner.visible = outer.visible = halo.visible = false;
     }
 
-    // Char the hull — darken every PBR material on the ship
+    // Char the hull — darken every PBR material on the ship. Hull materials
+    // are SHARED across live ships of this archetype, so we clone each mesh's
+    // material before mutating; otherwise darkening one wreck would dim every
+    // other ship of the same type. Cheap (~5 clones per death, no shader
+    // recompile since color/emissive/metalness/roughness are uniforms).
     this.group.traverse(obj => {
       if (!obj.isMesh) return;
       const m = obj.material;
       if (!m || !m.color) return;
-      m.color.multiplyScalar(0.18);
-      if (m.emissive) m.emissive.setHex(0x000000);
-      if ('metalness' in m) m.metalness = 0.3;
-      if ('roughness' in m) m.roughness = 0.95;
+      const wm = m.clone();
+      wm.color.multiplyScalar(0.18);
+      if (wm.emissive) wm.emissive.setHex(0x000000);
+      if ('metalness' in wm) wm.metalness = 0.3;
+      if ('roughness' in wm) wm.roughness = 0.95;
+      obj.material = wm;
     });
 
     // No more thrust particles — existing live ones fade naturally, hide the mesh
@@ -441,9 +549,26 @@ class NPCShip {
   // ── Cleanup ───────────────────────────────────────────────────────────────
 
   dispose() {
+    // Particle geometry is per-ship; particle material is shared per archetype
+    // and reused by other ships, so do not dispose it here.
     this._particleMesh.geometry.dispose();
-    this._particleMesh.material.dispose();
     this._scene.remove(this._particleMesh);
+
+    // Skip shared archetype materials and the shared invisible hitbox material
+    // when disposing — they're still in use by other live ships. Per-ship
+    // geometries (cylinders, cones, boxes, nozzle circles) and per-wreck
+    // cloned hull materials are safe to dispose.
+    const sharedMats = _getArchResources(this._arch).materials;
+    const isShared = m => (
+      m === sharedMats.body || m === sharedMats.dark ||
+      m === sharedMats.accent || m === sharedMats.glass ||
+      m === sharedMats.particle || m === _SHARED_HITBOX_MAT
+    );
+    this.group.traverse(obj => {
+      if (!obj.isMesh) return;
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material && !isShared(obj.material)) obj.material.dispose();
+    });
     this._scene.remove(this.group);
   }
 }
@@ -536,23 +661,75 @@ class DeathBlast {
 }
 
 // ── NPCFleet (exported) ───────────────────────────────────────────────────────
+// Constructor no longer spawns ships — call fleet.spawn(archId, pos, mult)
+// per-wave. Ships register their own `dmg` for the rocket damage callback.
 
 export class NPCFleet {
   constructor(scene, onShoot = null, onDeath = null) {
-    this._blasts = Array.from({ length: 3 }, () => new DeathBlast(scene));
-    this._ships  = VARIANTS.map(
-      (v, i) => new NPCShip(
-        scene, v, SPAWN_POSITIONS[i], HULL_PROPS[i],
-        pos => { this.triggerDeathBlast(pos); onDeath?.(pos); },
-        onShoot,
-      ),
+    this._scene   = scene;
+    this._onShoot = onShoot;
+    this._onDeath = onDeath;
+    this._blasts  = Array.from({ length: 5 }, () => new DeathBlast(scene));
+    this._ships   = [];
+    this._labelCounter = { scout: 0, heavy: 0, boss: 0 };
+  }
+
+  // Pre-compile shaders for every archetype at startup, so the first wave
+  // doesn't stutter when Three.js compiles the body/glass/nozzle/particle
+  // shaders for the first time. Spawns one warmup ship per archetype far
+  // below the world, calls renderer.compile (sync — walks the scene graph
+  // and forces shader compilation), then disposes the warmups. Also seeds
+  // the per-archetype material cache (subsequent ships reuse those mats).
+  prewarm(renderer, scene, camera) {
+    const farPos = new THREE.Vector3(0, 0, -1e7);
+    const warmups = [];
+    for (const archetypeId of Object.keys(ARCHETYPES)) {
+      warmups.push(this.spawn(archetypeId, farPos, { hp: 1, dmg: 1 }));
+    }
+    renderer.compile(scene, camera);
+    for (const ship of warmups) {
+      ship.dispose();
+      const idx = this._ships.indexOf(ship);
+      if (idx !== -1) this._ships.splice(idx, 1);
+    }
+    // Reset spawn counters so the first real wave's labels are -1, -2, ...
+    this._labelCounter = { scout: 0, heavy: 0, boss: 0 };
+  }
+
+  spawn(archetypeId, position, mult = { hp: 1, dmg: 1 }) {
+    const arch = ARCHETYPES[archetypeId];
+    if (!arch) throw new Error(`Unknown archetype: ${archetypeId}`);
+
+    const idx = ++this._labelCounter[archetypeId];
+    const label = arch.isBoss ? arch.name : `${arch.name}-${idx}`;
+
+    const ship = new NPCShip(
+      this._scene, arch, position, mult, label,
+      (deathPos, deadArch) => {
+        this.triggerDeathBlast(deathPos);
+        // Boss death — second blast for emphasis, plus extra loot
+        if (deadArch.isBoss) {
+          setTimeout(() => this.triggerDeathBlast(deathPos), 200);
+          setTimeout(() => this.triggerDeathBlast(deathPos), 420);
+        }
+        this._onDeath?.(deathPos, deadArch);
+      },
+      this._onShoot,
     );
+    this._ships.push(ship);
+    return ship;
   }
 
   // Hitbox meshes exposed so main.js raycaster can target NPC ships.
   // Wrecks (dead ships) are excluded so they can't be re-targeted.
   get targetables() {
     return this._ships.filter(s => s._state !== 'dead').map(s => s.hitbox);
+  }
+
+  get aliveCount() {
+    let n = 0;
+    for (const s of this._ships) if (s._state !== 'dead') n++;
+    return n;
   }
 
   // Look up which NPCShip owns a given mesh (used by RocketManager)
@@ -565,9 +742,18 @@ export class NPCFleet {
     if (blast) blast.trigger(pos);
   }
 
-  update(delta, playerPos, elapsed) {
-    for (const s of this._ships) s.update(delta, playerPos, elapsed);
+  update(delta, playerPos) {
+    for (const s of this._ships) s.update(delta, playerPos);
     for (const b of this._blasts) if (b.alive) b.update(delta);
+
+    // Reap any wrecks past their despawn timer
+    for (let i = this._ships.length - 1; i >= 0; i--) {
+      const s = this._ships[i];
+      if (s._disposable) {
+        s.dispose();
+        this._ships.splice(i, 1);
+      }
+    }
   }
 
   dispose() {

@@ -5,6 +5,7 @@ import { InputHandler } from './input.js';
 import { World }        from './world.js';
 import { HUD }          from './hud.js';
 import { NPCFleet }     from './npcs.js';
+import { WaveManager }  from './waves.js';
 import { RocketManager }  from './rockets.js';
 import { WeaponSystem }   from './weapons.js';
 import { LootManager }    from './loot.js';
@@ -219,7 +220,6 @@ const ASTEROID_DAMAGE       = 15;   // hp per collision tick
 const ASTEROID_HIT_COOLDOWN = 2.0;  // seconds between collision damage ticks
 const SHIELD_REGEN_DELAY    = 5.0;  // seconds after last damage before shields regen
 const SHIELD_REGEN_RATE     = 0.5;  // shield points per second (1 per 2 seconds)
-const NPC_ROCKET_DAMAGE     = 3;    // hp per hit from an NPC rocket
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 const input = new InputHandler();
@@ -270,17 +270,32 @@ const loot = new LootManager(scene, ({ type }) => {
 });
 hud.setScore(score);
 
-// NPC fires a rocket at the player ship. Damage is deferred via onHit until
-// the rocket detonates (RocketManager.update calls onHit on close approach).
-// On NPC death, the fleet calls our onDeath hook which spawns a loot drop.
+// NPC fires a rocket at the player ship. Damage is wave-scaled per-ship and
+// supplied by the NPC via the third arg. On NPC death, the fleet calls our
+// onDeath hook which spawns loot drops (more for bosses).
 const fleet = new NPCFleet(
   scene,
-  (originPos, npcName) => {
+  (originPos, npcName, dmg) => {
     if (_playerDead) return;
-    rockets.fire(originPos, ship.group, () => onPlayerHit(npcName, NPC_ROCKET_DAMAGE));
+    rockets.fire(originPos, ship.group, () => onPlayerHit(npcName, dmg));
   },
-  pos => loot.spawn(pos),
+  (pos, archetype) => {
+    loot.spawn(pos);
+    if (archetype?.isBoss) {
+      const off1 = pos.clone(); off1.x += 35; loot.spawn(off1);
+      const off2 = pos.clone(); off2.x -= 35; loot.spawn(off2);
+    }
+  },
 );
+
+// Pre-compile shaders for every NPC archetype before gameplay starts. Without
+// this, the first ship of each archetype causes a multi-second main-thread
+// stall the first time Three.js encounters its materials.
+fleet.prewarm(renderer, scene, camera);
+
+// Wave manager — replaces the old fixed 3-NPC encounter with escalating
+// scout/heavy waves and a boss every 5th wave.
+const waves = new WaveManager(fleet, hud, () => ship.position);
 
 let elapsed = 0;
 
@@ -702,6 +717,10 @@ function startGame() {
     setTimeout(() => { hint.style.opacity = '0'; }, 6000);
   }
 
+  // Begin the endless wave loop. The manager's PRESTART_DELAY gives the player
+  // a few seconds to read the hint before the first scouts appear.
+  waves.start();
+
   (function animate() {
   requestAnimationFrame(animate);
 
@@ -738,7 +757,8 @@ function startGame() {
   // Sync player health HUD every frame
   hud.setPlayerHealth(ship.shield, ship.armor, ship.hull);
   hud.setHullWarning(ship.hull < 20);
-  fleet.update(delta, ship.position, elapsed);
+  fleet.update(delta, ship.position);
+  if (!_playerDead) waves.update(delta);
   rockets.update(delta, fleet);
   weapons.update(delta, fleet);
   loot.update(delta, ship.position);
