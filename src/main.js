@@ -704,6 +704,8 @@ new MobileControls(
     // pinch apart (positive delta) = zoom in = decrease radius
     inspRadius = THREE.MathUtils.clamp(inspRadius * Math.pow(1.005, -delta), 60, 80000);
   },
+  () => weapons.pressFire(),
+  () => weapons.releaseFire(),
 );
 
 // ── Animation Loop ────────────────────────────────────────────────────────────
