@@ -270,13 +270,12 @@ class NPCShip {
   _buildThrusters(v) {
     this._nozzleGlows = [];
 
-    this._thrusterLight = new THREE.PointLight(v.light1, 0, 220);
-    this._thrusterLight.position.set(-50, 0, 0);
-    this.group.add(this._thrusterLight);
-
-    this._thrusterFill = new THREE.PointLight(v.light2, 0, 120);
-    this._thrusterFill.position.set(-30, 0, 0);
-    this.group.add(this._thrusterFill);
+    // No PointLights here — every dynamically-added PointLight changes the
+    // scene's NUM_POINT_LIGHTS, which forces Three.js to recompile every
+    // MeshStandardMaterial shader in the scene. With NPCs spawning per wave
+    // that produced multi-hundred-millisecond stutters on every wave start.
+    // The visible thruster effect comes entirely from the additive-blending
+    // nozzle meshes below (MeshBasicMaterial doesn't read scene lights).
 
     const addMat = color => new THREE.MeshBasicMaterial({
       color, transparent: true, opacity: 0,
@@ -452,8 +451,6 @@ class NPCShip {
     const t = this._thrusterIntensity;
 
     // ── Nozzle glow visuals ───────────────────────────────────────────────
-    this._thrusterLight.intensity = t * 9;
-    this._thrusterFill.intensity  = t * 4;
     for (const { inner, outer, halo } of this._nozzleGlows) {
       inner.material.opacity = t * 0.95;
       outer.material.opacity = t * 0.6;
@@ -512,8 +509,6 @@ class NPCShip {
     this._onDeath?.(_tmpPos, this._arch);
 
     // Kill alive-only visual elements
-    this._thrusterLight.intensity = 0;
-    this._thrusterFill.intensity  = 0;
     for (const { inner, outer, halo } of this._nozzleGlows) {
       inner.visible = outer.visible = halo.visible = false;
     }
