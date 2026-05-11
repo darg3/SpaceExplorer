@@ -2,12 +2,14 @@ const STICK_MAX_R = 44;
 const THRESHOLD   = 18;
 
 export class MobileControls {
-  constructor(inp, onCameraMove, onZoom) {
+  constructor(inp, onCameraMove, onZoom, onFirePress = null, onFireRelease = null) {
     if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return;
 
-    this._inp           = inp;
-    this._onCameraMove  = onCameraMove;
-    this._onZoom        = onZoom;
+    this._inp             = inp;
+    this._onCameraMove    = onCameraMove;
+    this._onZoom          = onZoom;
+    this._onFirePress     = onFirePress;
+    this._onFireRelease   = onFireRelease;
 
     this._stickTouchId  = null;
     this._stickOriginX  = 0;
@@ -96,6 +98,18 @@ export class MobileControls {
         background: rgba(180,80,0,0.55);
         box-shadow: 0 0 20px rgba(255,160,0,0.5);
       }
+      #mob-btn-fire {
+        bottom: 100px; right: 18px;
+        width: 68px; height: 68px;
+        font-size: 11px;
+        border-color: rgba(255,80,40,0.6);
+        color: rgba(255,140,90,0.95);
+        box-shadow: 0 0 12px rgba(255,80,30,0.35);
+      }
+      #mob-btn-fire.mob-btn--active {
+        background: rgba(180,40,10,0.6);
+        box-shadow: 0 0 22px rgba(255,100,40,0.55);
+      }
     `;
     document.head.appendChild(style);
 
@@ -135,7 +149,13 @@ export class MobileControls {
     boost.className = 'mob-btn';
     boost.textContent = 'BOOST';
 
+    const fire = document.createElement('div');
+    fire.id = 'mob-btn-fire';
+    fire.className = 'mob-btn';
+    fire.textContent = 'FIRE';
+
     right.appendChild(boost);
+    right.appendChild(fire);
 
     overlay.appendChild(left);
     overlay.appendChild(right);
@@ -148,6 +168,7 @@ export class MobileControls {
     this._rollQ      = rollQ;
     this._rollE      = rollE;
     this._boost      = boost;
+    this._fire       = fire;
   }
 
   // ── Event Binding ──────────────────────────────────────────────────────────
@@ -173,6 +194,26 @@ export class MobileControls {
 
     // Boost button
     this._bindBtn(this._boost, 'ShiftLeft');
+
+    // Fire button — press-and-hold semantics (plasma needs the hold to charge)
+    this._bindFireBtn(this._fire);
+  }
+
+  // Like _bindBtn but routes through the supplied fire callbacks instead of
+  // injecting a key state. Press starts the fire / charge, release ends it —
+  // so plasma orbs can be charged by holding the button.
+  _bindFireBtn(el) {
+    el.addEventListener('touchstart', e => {
+      e.stopPropagation(); e.preventDefault();
+      el.classList.add('mob-btn--active');
+      this._onFirePress?.();
+    }, { passive: false });
+    const release = () => {
+      el.classList.remove('mob-btn--active');
+      this._onFireRelease?.();
+    };
+    el.addEventListener('touchend',    release);
+    el.addEventListener('touchcancel', release);
   }
 
   _bindBtn(el, code) {
@@ -270,8 +311,8 @@ export class MobileControls {
       return;
     }
     if (this._camTouchId !== null) return;
-    // Single touch — camera drag (ignore boost button)
-    if (e.target === this._boost) return;
+    // Single touch — camera drag (ignore action buttons)
+    if (e.target === this._boost || e.target === this._fire) return;
     const t = e.changedTouches[0];
     this._camTouchId = t.identifier;
     this._camLastX   = t.clientX;
